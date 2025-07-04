@@ -1,11 +1,10 @@
 critical:
-  - "Ban"
-  - "Unban"
-  - "ERROR"
+  - "^.*Ban\\s+\\d{1,3}(?:\\.\\d{1,3}){3}.*$"
+  - "^.*Unban\\s+\\d{1,3}(?:\\.\\d{1,3}){3}.*$"
+  - "^.*ERROR.*$"
 
 suspicious:
-  - "WARNING"
-  - "Found .* within .*"
-  - "Jail '.*' started"
-  - "Unban"
-  
+  - "^.*WARNING.*$"
+  - "^.*Found\\s+\\d+\\s+failures?\\s+within\\s+.*$"
+  - "^.*Jail\\s+'.*'\\s+started.*$"
+  - "^.*Unban\\s+\\d{1,3}(?:\\.\\d{1,3}){3}.*$"

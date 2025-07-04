@@ -1,8 +1,8 @@
 critical:
-  - "UFW BLOCK"
-  - "UFW AUDIT BLOCK"
+  - "^.*UFW BLOCK.*$"
+  - "^.*UFW AUDIT BLOCK.*$"
 
 suspicious:
-  - "UFW LIMIT"
-  - "UFW AUDIT ALLOW"
-  - "UFW ALLOW IN"
+  - "^.*UFW LIMIT.*$"
+  - "^.*UFW AUDIT ALLOW.*$"
+  - "^.*UFW ALLOW IN.*$"

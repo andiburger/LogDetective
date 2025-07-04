@@ -8,7 +8,6 @@ import re
 import paho.mqtt.publish as publish
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-from threading import Thread
 from hashlib import md5
 
 PID_FILE = "/var/run/log_detective.pid"
@@ -52,9 +51,18 @@ class RuleWatcher:
         try:
             current_hash = md5(open(self.rule_file, 'rb').read()).hexdigest()
             if current_hash != self.rules_hash:
-                self.rules = load_rules(self.rule_file)
+                raw_rules = load_rules(self.rule_file)
+                compiled_rules = {}
+                for level in ("critical", "suspicious"):
+                    compiled_rules[level] = []
+                    for pattern in raw_rules.get(level, []):
+                        try:
+                            compiled_rules[level].append(re.compile(pattern))
+                        except re.error as e:
+                            logging.error(f"Invalid regex '{pattern}' in {self.rule_file}: {e}")
+                self.rules = compiled_rules
                 self.rules_hash = current_hash
-                logging.info(f"Reloaded rules for {self.path}")
+                logging.info(f"Reloaded and compiled rules for {self.path}")
         except Exception as e:
             logging.error(f"Error loading rules from {self.rule_file}: {e}")
 
@@ -63,7 +71,7 @@ class RuleWatcher:
         results = []
         for rule_type in ("critical", "suspicious"):
             for regex in self.rules.get(rule_type, []):
-                if regex and re.search(regex, line):
+                if regex.search(line):
                     results.append((rule_type, line.strip()))
         return results
 
@@ -108,6 +116,27 @@ def start_monitoring():
 
     mqtt_config = config["mqtt"]
     verbosity = config.get("verbosity", 1)
+
+    # Send MQTT status message on startup
+    try:
+        status_payload = json.dumps({
+            "status": "started",
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "pid": os.getpid()
+        })
+        publish.single(
+            f"{mqtt_config.get('base_topic', 'logdetective')}/status",
+            payload=status_payload,
+            hostname=mqtt_config["host"],
+            port=mqtt_config.get("port", 1883),
+            auth={
+                "username": mqtt_config.get("username"),
+                "password": mqtt_config.get("password")
+            } if mqtt_config.get("username") else None
+        )
+        logging.info("Published startup status message to MQTT.")
+    except Exception as e:
+        logging.error(f"Failed to publish startup status message: {e}")
 
     observers = []
 

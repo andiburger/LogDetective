@@ -12,7 +12,6 @@ services:
       - /var/log/fail2ban:/var/log/fail2ban:ro
       - ./config.yml:/app/config.yml:ro
       - ./rules:/app/rules:ro
-      - ./log_detective.log:/app/log_detective.log
-      - ./log_detective.pid:/var/run/log_detective.pid
+    network_mode: host
     environment:
       - PYTHONUNBUFFERED=1
