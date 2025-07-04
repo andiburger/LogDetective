@@ -1,0 +1,11 @@
+critical:
+  - "Exception in server tick loop"
+  - "java.lang.NullPointerException"
+  - "Connection reset by peer"
+  - "Too many login attempts"
+  - "Failed to verify username"
+
+suspicious:
+  - "UUID of player"
+  - "logged in with entity id"
+  - "Connection lost"

@@ -1,0 +1,11 @@
+critical:
+  - "Scan detected"
+  - "Danger level .* exceeded threshold"
+  - "UDP scan detected"
+  - "TCP port sweep detected"
+  - "Stealth scan"
+
+suspicious:
+  - "ICMP scan"
+  - "Possible port scan from"
+  - "Threshold for alerts has been exceeded"

@@ -1,0 +1,11 @@
+critical:
+  - "Failed password for"
+  - "authentication failure"
+  - "reverse mapping checking getaddrinfo for"
+  - "Received disconnect from .*: 11: disconnected by user"
+  - "pam_unix(sshd:auth): authentication failure"
+
+suspicious:
+  - "Invalid user"
+  - "Did not receive identification string from"
+  - "Connection closed by authenticating user"

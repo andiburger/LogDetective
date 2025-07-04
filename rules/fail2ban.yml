@@ -1,0 +1,9 @@
+critical:
+  - "Ban"
+  - "Unban"
+  - "ERROR"
+
+suspicious:
+  - "WARNING"
+  - "Found .* within .*"
+  - "Jail '.*' started"

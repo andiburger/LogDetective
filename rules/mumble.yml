@@ -1,0 +1,5 @@
+critical:
+  - "Connection closed: Error during SSL handshake"
+  - "Wrong certificate or password"
+suspicious:
+  - "New connection"

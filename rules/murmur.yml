@@ -1,0 +1,10 @@
+critical:
+  - "Connection closed: Error during SSL handshake"
+  - "Wrong certificate or password for existing user"
+  - "Invalid server password"
+  - "no shared cipher"
+  - "bad key share"
+
+suspicious:
+  - "New connection:"
+  - "Connection closed: The remote host closed the connection [1]"

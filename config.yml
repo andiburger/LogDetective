@@ -1,0 +1,21 @@
+mqtt:
+  host: "mqtt.local"
+  port: 1883
+  topic: "rpi5/logdetective"
+  client_id: "logdetective-rpi5"
+
+verbosity: "normal"
+
+logs:
+  - path: "/var/log/mumble-server/mumble-server.log"
+    rule_file: "rules/mumble.yaml"
+  - path: "/var/log/auth.log"
+    rule_file: "rules/ssh.yaml"
+  - path: "/var/log/docker/minecraft.log"
+    rule_file: "rules/minecraft.yaml"
+  - path: /var/log/psad/alert
+    rules: rules/psad.yaml
+  - path: /var/log/ufw.log
+    rules: rules/ufw.yaml
+  - path: /var/log/fail2ban.log
+    rules: rules/fail2ban.yaml
