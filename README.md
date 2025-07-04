@@ -37,6 +37,7 @@
 - Python 3.8+  
 - [paho-mqtt](https://pypi.org/project/paho-mqtt/)  
 - [PyYAML](https://pypi.org/project/PyYAML/)  
+- [watchdog](https://pypi.org/project/watchdog/)
 
 Install dependencies with:
 
