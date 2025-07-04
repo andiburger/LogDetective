@@ -9,11 +9,16 @@ verbosity: 1  # 0 = only critical, 1 = suspicious, 2 = all
 logs:
   - path: "/var/log/mumble-server/mumble-server.log"
     rule_file: "rules/mumble.yaml"
+    mqtt_topic: "logdetective/mumble"
   - path: "/var/log/auth.log"
     rule_file: "rules/ssh.yaml"
-  - path: /var/log/psad/alert
-    rules: rules/psad.yaml
-  - path: /var/log/ufw.log
-    rules: rules/ufw.yaml
-  - path: /var/log/fail2ban.log
-    rules: rules/fail2ban.yaml
+    mqtt_topic: "logdetective/ssh"
+  - path: "/var/log/psad/alert"
+    rule_file: "rules/psad.yaml"
+    mqtt_topic: "logdetective/psad"
+  - path: "/var/log/ufw.log"
+    rule_file: "rules/ufw.yaml"
+    mqtt_topic: "logdetective/ufw"
+  - path: "/var/log/fail2ban.log"
+    rule_file: "rules/fail2ban.yaml"
+    mqtt_topic: "logdetective/fail2ban"
