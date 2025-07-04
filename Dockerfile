@@ -1,18 +1,17 @@
 FROM python:3.14-slim
 
-# System-Dependencies für watchdog
-RUN apt-get update && apt-get install -y gcc python3-dev libffi-dev && rm -rf /var/lib/apt/lists/*
 
-# Arbeitsverzeichnis
 WORKDIR /app
 
-# Python-Requirements
-COPY requirements.txt .
+COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Skript und Konfig kopieren
-COPY log_detective.py .
-COPY config.yaml ./config.yaml
-COPY rules ./rules
+COPY log_detective.py ./
+COPY config.yml ./
+COPY rules/ ./rules/
+
+RUN mkdir -p /var/run /var/log/mumble-server /var/log/psad /var/log/ufw /var/log/fail2ban
+
+VOLUME ["/var/log/mumble-server", "/var/log/psad", "/var/log/ufw", "/var/log/fail2ban"]
 
 CMD ["python", "log_detective.py"]

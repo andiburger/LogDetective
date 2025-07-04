@@ -1,113 +1,139 @@
 import os
 import time
 import yaml
+import json
+import logging
+import signal
 import re
-import threading
+import paho.mqtt.publish as publish
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-import paho.mqtt.client as mqtt
+from threading import Thread
+from hashlib import md5
 
-class RuleManager:
-    def __init__(self):
+PID_FILE = "/var/run/log_detective.pid"
+CONFIG_FILE = "config.yml"
+LOG_FILE = "log_detective.log"
+
+# Setup logging
+logging.basicConfig(filename=LOG_FILE, level=logging.INFO,
+                    format="%(asctime)s [%(levelname)s] %(message)s")
+
+# Global stop flag
+running = True
+
+def write_pid():
+    with open(PID_FILE, 'w') as f:
+        f.write(str(os.getpid()))
+
+def handle_shutdown(signum, frame):
+    global running
+    logging.info("Shutdown signal received.")
+    running = False
+
+signal.signal(signal.SIGTERM, handle_shutdown)
+signal.signal(signal.SIGINT, handle_shutdown)
+
+def load_rules(rule_file):
+    with open(rule_file, 'r') as f:
+        return yaml.safe_load(f)
+
+class RuleWatcher:
+    def __init__(self, path, rule_file, verbosity, mqtt_config):
+        self.path = path
+        self.rule_file = rule_file
+        self.verbosity = verbosity
+        self.mqtt_config = mqtt_config
+        self.rules_hash = None
         self.rules = {}
+        self._load_rules()
 
-    def load_rules(self, rule_path):
+    def _load_rules(self):
         try:
-            with open(rule_path, 'r') as f:
-                data = yaml.safe_load(f)
-                self.rules[rule_path] = {
-                    "critical": [re.compile(p) for p in data.get('critical', [])],
-                    "suspicious": [re.compile(p) for p in data.get('suspicious', [])]
-                }
+            current_hash = md5(open(self.rule_file, 'rb').read()).hexdigest()
+            if current_hash != self.rules_hash:
+                self.rules = load_rules(self.rule_file)
+                self.rules_hash = current_hash
+                logging.info(f"Reloaded rules for {self.path}")
         except Exception as e:
-            print(f"[!] Error loading {rule_path}: {e}")
+            logging.error(f"Error loading rules from {self.rule_file}: {e}")
 
-    def reload_rule_file(self, rule_path):
-        print(f"[~] Reloading rules: {rule_path}")
-        self.load_rules(rule_path)
-
-    def match(self, rule_path, line):
+    def check_line(self, line):
+        self._load_rules()
         results = []
-        if rule_path not in self.rules:
-            return results
-        for level, patterns in self.rules[rule_path].items():
-            for pat in patterns:
-                if pat.search(line):
-                    results.append(level)
+        for rule_type in ("critical", "suspicious"):
+            for regex in self.rules.get(rule_type, []):
+                if regex and re.search(regex, line):
+                    results.append((rule_type, line.strip()))
         return results
 
-class RuleWatcher(FileSystemEventHandler):
-    def __init__(self, rule_manager):
-        self.rule_manager = rule_manager
+    def send_mqtt(self, level, message):
+        topic = f"{self.mqtt_config['topic_base']}/{os.path.basename(self.path).replace('.log','')}/{level}"
+        payload = json.dumps({"log": self.path, "level": level, "message": message})
+        try:
+            publish.single(
+                topic,
+                payload=payload,
+                hostname=self.mqtt_config["host"],
+                port=self.mqtt_config.get("port", 1883)
+            )
+        except Exception as e:
+            logging.error(f"MQTT publish failed: {e}")
+
+    def process_line(self, line):
+        findings = self.check_line(line)
+        for level, msg in findings:
+            if self.verbosity >= (1 if level == "suspicious" else 0):
+                logging.warning(f"{level.upper()} in {self.path}: {msg}")
+                self.send_mqtt(level, msg)
+
+class LogFileHandler(FileSystemEventHandler):
+    def __init__(self, watcher):
+        self.watcher = watcher
+        self._file = open(watcher.path, 'r')
+        self._file.seek(0, 2)  # Jump to end of file
 
     def on_modified(self, event):
-        if event.is_directory or not event.src_path.endswith('.yaml'):
+        if event.src_path != self.watcher.path:
             return
-        self.rule_manager.reload_rule_file(event.src_path)
+        while True:
+            line = self._file.readline()
+            if not line:
+                break
+            self.watcher.process_line(line)
 
-class LogMonitor:
-    def __init__(self, config_path):
-        self.config = self.load_config(config_path)
-        self.rule_manager = RuleManager()
-        self.verbosity = self.config.get('verbosity', 1)
+def start_monitoring():
+    with open(CONFIG_FILE, 'r') as f:
+        config = yaml.safe_load(f)
 
-        # MQTT
-        mqtt_config = self.config.get('mqtt', {})
-        self.mqtt_host = mqtt_config.get('host', 'localhost')
-        self.mqtt_port = mqtt_config.get('port', 1883)
-        self.mqtt_topic = mqtt_config.get('topic', 'log_detective/events')
-        self.mqtt_client = mqtt.Client()
-        self.mqtt_client.connect(self.mqtt_host, self.mqtt_port)
+    mqtt_config = config["mqtt"]
+    verbosity = config.get("verbosity", 1)
 
-        self.rule_paths = []
+    observers = []
 
-        for entry in self.config['logs']:
-            self.rule_manager.load_rules(entry['rules'])
-            self.rule_paths.append(entry['rules'])
-
-    def start(self):
-        # Watch rule files
-        self.start_rule_watcher()
-
-        # Monitor logs
-        for entry in self.config['logs']:
-            threading.Thread(target=self.monitor_log, args=(entry['path'], entry['rules'])).start()
-
-    def start_rule_watcher(self):
-        event_handler = RuleWatcher(self.rule_manager)
+    for log_cfg in config["logs"]:
+        watcher = RuleWatcher(
+            log_cfg["path"],
+            log_cfg["rule_file"],
+            verbosity,
+            mqtt_config
+        )
+        event_handler = LogFileHandler(watcher)
         observer = Observer()
-        for rule_path in set(self.rule_paths):
-            rule_dir = os.path.dirname(rule_path)
-            observer.schedule(event_handler, rule_dir, recursive=False)
+        observer.schedule(event_handler, os.path.dirname(log_cfg["path"]), recursive=False)
         observer.start()
+        observers.append(observer)
+        logging.info(f"Started monitoring {log_cfg['path']}")
 
-    def monitor_log(self, filepath, rule_path):
-        try:
-            with open(filepath, 'r') as f:
-                f.seek(0, os.SEEK_END)
-                while True:
-                    line = f.readline()
-                    if not line:
-                        time.sleep(0.2)
-                        continue
-                    matches = self.rule_manager.match(rule_path, line)
-                    for level in matches:
-                        if self.verbosity >= 1:
-                            print(f"[{level.upper()}] {line.strip()}")
-                        self.send_mqtt(level, line.strip())
-        except Exception as e:
-            print(f"[!] Error monitoring {filepath}: {e}")
-
-    def send_mqtt(self, level, message):
-        payload = yaml.dump({
-            'level': level,
-            'message': message
-        })
-        self.mqtt_client.publish(self.mqtt_topic, payload)
-
-    def load_config(self, path):
-        with open(path, 'r') as f:
-            return yaml.safe_load(f)
+    try:
+        while running:
+            time.sleep(1)
+    finally:
+        for obs in observers:
+            obs.stop()
+            obs.join()
+        logging.info("Shutting down log_detective...")
 
 if __name__ == "__main__":
-    LogMonitor('config.yaml').start()
+    write_pid()
+    start_monitoring()

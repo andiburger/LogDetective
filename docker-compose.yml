@@ -1,0 +1,18 @@
+version: "3.9"
+
+services:
+  log_detective:
+    build: .
+    container_name: log_detective
+    restart: unless-stopped
+    volumes:
+      - /var/log/mumble-server:/var/log/mumble-server:ro
+      - /var/log/psad:/var/log/psad:ro
+      - /var/log/ufw:/var/log/ufw:ro
+      - /var/log/fail2ban:/var/log/fail2ban:ro
+      - ./config.yml:/app/config.yml:ro
+      - ./rules:/app/rules:ro
+      - ./log_detective.log:/app/log_detective.log
+      - ./log_detective.pid:/var/run/log_detective.pid
+    environment:
+      - PYTHONUNBUFFERED=1

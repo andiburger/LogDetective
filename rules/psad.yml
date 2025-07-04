@@ -4,8 +4,11 @@ critical:
   - "UDP scan detected"
   - "TCP port sweep detected"
   - "Stealth scan"
+  - "PORT SCAN DETECTED"
+  - "SCAN FINISHED"
 
 suspicious:
   - "ICMP scan"
   - "Possible port scan from"
   - "Threshold for alerts has been exceeded"
+  - "Potential Scan"

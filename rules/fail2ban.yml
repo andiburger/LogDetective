@@ -7,3 +7,5 @@ suspicious:
   - "WARNING"
   - "Found .* within .*"
   - "Jail '.*' started"
+  - "Unban"
+  

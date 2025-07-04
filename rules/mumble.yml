@@ -1,5 +1,7 @@
 critical:
   - "Connection closed: Error during SSL handshake"
-  - "Wrong certificate or password"
+  - "Connection closed: The remote host closed the connection \\[1\\]"
+  - "Connection closed: .* \\[13\\]"
+
 suspicious:
-  - "New connection"
+  - "New connection: .*"

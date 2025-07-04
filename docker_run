@@ -1,0 +1,8 @@
+docker run -d \
+  --name log_detective \
+  --restart unless-stopped \
+  -v /var/log:/var/log:ro \
+  -v /etc/log_detective/config.yaml:/app/config.yaml:ro \
+  -v /etc/log_detective/rules:/app/rules:ro \
+  --network host \
+  log_detective:latest
