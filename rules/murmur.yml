@@ -4,6 +4,8 @@ critical:
   - "Invalid server password"
   - "no shared cipher"
   - "bad key share"
+  - "Rejected connection from"
+  - "Invalid server password"
 
 suspicious:
   - "New connection:"
