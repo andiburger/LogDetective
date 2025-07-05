@@ -7,11 +7,12 @@ services:
     restart: unless-stopped
     volumes:
       - /var/log/mumble-server:/var/log/mumble-server:ro
+      - /var/log/auth.log:/var/log/auth.log:ro
       - /var/log/psad:/var/log/psad:ro
       - /var/log/ufw:/var/log/ufw:ro
       - /var/log/fail2ban:/var/log/fail2ban:ro
-      - ./config.yml:/app/config.yml:ro
-      - ./rules:/app/rules:ro
+      - ${PWD}/config.yml:/app/config.yml:ro
+      - ${PWD}/rules:/app/rules:ro
     network_mode: host
     environment:
       - PYTHONUNBUFFERED=1

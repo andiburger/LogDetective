@@ -1,13 +1,13 @@
 import os
 import time
-import yaml
+import yaml # type: ignore
 import json
 import logging
 import signal
 import re
-import paho.mqtt.publish as publish
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
+import paho.mqtt.publish as publish # type: ignore
+from watchdog.observers import Observer # type: ignore
+from watchdog.events import FileSystemEventHandler # type: ignore
 from hashlib import md5
 
 PID_FILE = "/var/run/log_detective.pid"
@@ -137,6 +137,26 @@ class LogFileHandler(FileSystemEventHandler):
                 self._file.close()
                 self._file = open(self.watcher.path, 'r')
                 self._inode = current_inode
+                # Send MQTT message on logrotate detection
+                try:
+                    rotate_payload = json.dumps({
+                        "status": "logrotated",
+                        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                        "logfile": self.watcher.path
+                    })
+                    publish.single(
+                        f"{self.watcher.mqtt_config.get('topic_base', 'logdetective')}/status",
+                        payload=rotate_payload,
+                        hostname=self.watcher.mqtt_config["host"],
+                        port=self.watcher.mqtt_config.get("port", 1883),
+                        auth={
+                            "username": self.watcher.mqtt_config.get("username"),
+                            "password": self.watcher.mqtt_config.get("password")
+                        } if self.watcher.mqtt_config.get("username") else None
+                    )
+                    logging.info(f"Published logrotate status for {self.watcher.path}")
+                except Exception as e:
+                    logging.error(f"Failed to publish logrotate status for {self.watcher.path}: {e}")
         except Exception as e:
             logging.error(f"Error checking inode for {self.watcher.path}: {e}")
             return
