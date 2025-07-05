@@ -11,7 +11,7 @@ from watchdog.events import FileSystemEventHandler
 from hashlib import md5
 
 PID_FILE = "/var/run/log_detective.pid"
-CONFIG_FILE = "config.yml"
+CONFIG_FILE = "config.yaml"
 LOG_FILE = "log_detective.log"
 
 # Setup logging
