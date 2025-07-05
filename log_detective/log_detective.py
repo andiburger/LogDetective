@@ -9,6 +9,7 @@ import paho.mqtt.publish as publish # type: ignore
 from watchdog.observers import Observer # type: ignore
 from watchdog.events import FileSystemEventHandler # type: ignore
 from hashlib import md5
+import requests
 
 PID_FILE = "/var/run/log_detective.pid"
 CONFIG_FILE = "config.yaml"
@@ -47,11 +48,12 @@ def load_rules(rule_file):
         return yaml.safe_load(f)
 
 class RuleWatcher:
-    def __init__(self, path, rule_file, verbosity, mqtt_config):
+    def __init__(self, path, rule_file, verbosity, mqtt_config, influxdb_config):
         self.path = path
         self.rule_file = rule_file
         self.verbosity = verbosity
         self.mqtt_config = mqtt_config
+        self.influxdb_config = influxdb_config
         self.rules_hash = None
         self.rules = {}
         self._load_rules()
@@ -116,6 +118,30 @@ class RuleWatcher:
             if self.verbosity >= (1 if level == "suspicious" else 0):
                 logging.warning(f"{level.upper()} in {self.path}: {msg}")
                 self.send_mqtt(level, msg)
+                self.send_influxdb(level, msg)
+
+    def send_influxdb(self, level, message):
+        influx_cfg = self.influxdb_config
+        if not influx_cfg:
+            return
+        try:
+            line = f"log_event,logfile={os.path.basename(self.path)},level={level} value=1"
+            response = requests.post(
+                f"http://{influx_cfg['host']}:{influx_cfg.get('port', 8086)}/write",
+                params={
+                    "db": influx_cfg["database"],
+                    "u": influx_cfg.get("username", ""),
+                    "p": influx_cfg.get("password", "")
+                },
+                data=line,
+                timeout=2
+            )
+            if response.status_code != 204:
+                logging.error(f"InfluxDB write failed: {response.text}")
+            else:
+                logging.info(f"InfluxDB write success for {level} in {self.path}")
+        except Exception as e:
+            logging.error(f"Error sending to InfluxDB: {e}")
 
 class LogFileHandler(FileSystemEventHandler):
     def __init__(self, watcher):
@@ -171,6 +197,7 @@ def start_monitoring():
         config = yaml.safe_load(f)
 
     mqtt_config = config["mqtt"]
+    influxdb_config = config.get("influxdb")
     verbosity = config.get("verbosity", 1)
 
     # Send MQTT status message on startup
@@ -201,7 +228,8 @@ def start_monitoring():
             log_cfg["path"],
             log_cfg["rule_file"],
             verbosity,
-            mqtt_config
+            mqtt_config,
+            influxdb_config
         )
         event_handler = LogFileHandler(watcher)
         observer = Observer()

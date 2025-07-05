@@ -1,4 +1,4 @@
-import paho.mqtt.publish as publish
+import paho.mqtt.publish as publish # type: ignore
 
 from log_detective.log_detective import RuleWatcher
 
@@ -8,7 +8,7 @@ mqtt_config = {
     "port": 1883
 }
 
-watcher = RuleWatcher("/var/log/test.log", "rules/ssh.yml", 1, mqtt_config)
+watcher = RuleWatcher("/var/log/test.log", "rules/ssh.yml", 1, mqtt_config, None)
 watcher.send_mqtt("critical", "Manual test message")
 
 print("MQTT message sent successfully.")

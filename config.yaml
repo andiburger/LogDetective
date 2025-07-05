@@ -3,6 +3,12 @@ mqtt:
   port: 1883
   topic_base: "logdetective"
   client_id: "logdetective-rpi5"
+influxdb:
+  host: 192.168.178.120
+  port: 8086
+  database: logdetective
+  username: loguser
+  password: logpass
 
 verbosity: 1  # 0 = only critical, 1 = suspicious, 2 = all
 
