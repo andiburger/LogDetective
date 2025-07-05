@@ -12,6 +12,6 @@ COPY log_detective/ ./log_detective/
 COPY config.yml ./
 COPY rules/ ./rules/
 
-RUN mkdir -p /var/run /var/log/mumble-server /var/log/psad /var/log/ufw /var/log/fail2ban
+RUN mkdir -p /var/run /var/log/mumble-server /var/log/ufw /var/log/fail2ban
 
 CMD ["python", "-m", "log_detective.log_detective"]
