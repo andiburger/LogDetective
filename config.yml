@@ -1,5 +1,5 @@
 mqtt:
-  host: "mqtt.local"
+  host: "192.168.178.160"
   port: 1883
   topic_base: "logdetective"
   client_id: "logdetective-rpi5"

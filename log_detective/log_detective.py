@@ -49,20 +49,21 @@ class RuleWatcher:
 
     def _load_rules(self):
         try:
-            current_hash = md5(open(self.rule_file, 'rb').read()).hexdigest()
-            if current_hash != self.rules_hash:
-                raw_rules = load_rules(self.rule_file)
-                compiled_rules = {}
-                for level in ("critical", "suspicious"):
-                    compiled_rules[level] = []
-                    for pattern in raw_rules.get(level, []):
-                        try:
-                            compiled_rules[level].append(re.compile(pattern))
-                        except re.error as e:
-                            logging.error(f"Invalid regex '{pattern}' in {self.rule_file}: {e}")
-                self.rules = compiled_rules
-                self.rules_hash = current_hash
-                logging.info(f"Reloaded and compiled rules for {self.path}")
+            with open(self.rule_file, 'rb') as f:
+                current_hash = md5(f.read()).hexdigest()
+                if current_hash != self.rules_hash:
+                    raw_rules = load_rules(self.rule_file)
+                    compiled_rules = {}
+                    for level in ("critical", "suspicious"):
+                        compiled_rules[level] = []
+                        for pattern in raw_rules.get(level, []):
+                            try:
+                                compiled_rules[level].append(re.compile(pattern))
+                            except re.error as e:
+                                logging.error(f"Invalid regex '{pattern}' in {self.rule_file}: {e}")
+                    self.rules = compiled_rules
+                    self.rules_hash = current_hash
+                    logging.info(f"Reloaded and compiled rules for {self.path}")
         except Exception as e:
             logging.error(f"Error loading rules from {self.rule_file}: {e}")
 
@@ -76,16 +77,26 @@ class RuleWatcher:
         return results
 
     def send_mqtt(self, level, message):
-        topic = f"{self.mqtt_config['topic_base']}/{os.path.basename(self.path).replace('.log','')}/{level}"
-        payload = json.dumps({"log": self.path, "level": level, "message": message})
+        topic = f"{self.mqtt_config['topic_base']}"
         try:
+            topic = f"{self.mqtt_config['topic_base']}/{os.path.basename(self.path).replace('.log','')}/{level}"
+            payload = json.dumps({"log": self.path, "level": level, "message": message})
+            logging.info(f"MQTT SEND: topic={topic}, payload={payload}")
+            print("Sending MQTT message to host:", self.mqtt_config["host"])
+            print(f"MQTT SEND: topic={topic}, payload={payload}")
             publish.single(
                 topic,
                 payload=payload,
                 hostname=self.mqtt_config["host"],
-                port=self.mqtt_config.get("port", 1883)
+                port=self.mqtt_config["port"]
             )
         except Exception as e:
+            print(f"MQTT publish failed: {e}")
+            publish.single(topic,
+                           payload=json.dumps({"error": str(e)}),
+                           hostname=self.mqtt_config["host"],
+                           port=self.mqtt_config.get("port", 1883))
+            print(f"MQTT publish failed: {e}")
             logging.error(f"MQTT publish failed: {e}")
 
     def process_line(self, line):
