@@ -9,7 +9,6 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY log_detective/ ./log_detective/
-COPY config.yaml ./
 COPY rules/ ./rules/
 
 RUN mkdir -p /var/run /var/log/mumble-server /var/log/ufw /var/log/fail2ban
