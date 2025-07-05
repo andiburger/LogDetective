@@ -14,9 +14,18 @@ PID_FILE = "/var/run/log_detective.pid"
 CONFIG_FILE = "config.yaml"
 LOG_FILE = "log_detective.log"
 
-# Setup logging
-logging.basicConfig(filename=LOG_FILE, level=logging.INFO,
-                    format="%(asctime)s [%(levelname)s] %(message)s")
+# Setup logging to file and console
+file_handler = logging.FileHandler(LOG_FILE)
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+
+logging.getLogger().setLevel(logging.INFO)
+logging.getLogger().addHandler(file_handler)
+logging.getLogger().addHandler(console_handler)
 
 # Global stop flag
 running = True
