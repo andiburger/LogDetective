@@ -1,7 +1,7 @@
 import yaml
 import re
 
-with open("rules/murmur.yml") as f:
+with open("rules/murmur.yaml") as f:
     rules = yaml.safe_load(f)
 
 print("Loaded rules:", rules)

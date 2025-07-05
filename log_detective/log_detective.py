@@ -82,8 +82,7 @@ class RuleWatcher:
             topic = f"{self.mqtt_config['topic_base']}/{os.path.basename(self.path).replace('.log','')}/{level}"
             payload = json.dumps({"log": self.path, "level": level, "message": message})
             logging.info(f"MQTT SEND: topic={topic}, payload={payload}")
-            print("Sending MQTT message to host:", self.mqtt_config["host"])
-            print(f"MQTT SEND: topic={topic}, payload={payload}")
+            print(f"MQTT SEND TRIGGERED: {payload}")
             publish.single(
                 topic,
                 payload=payload,
@@ -100,8 +99,11 @@ class RuleWatcher:
             logging.error(f"MQTT publish failed: {e}")
 
     def process_line(self, line):
+        logging.info(f"Processing line: {line.strip()}")
         findings = self.check_line(line)
+        logging.info(f"check_line result: {findings}")
         for level, msg in findings:
+            logging.info(f"LINE MATCHED [{level}]: {msg}")
             if self.verbosity >= (1 if level == "suspicious" else 0):
                 logging.warning(f"{level.upper()} in {self.path}: {msg}")
                 self.send_mqtt(level, msg)
