@@ -113,12 +113,23 @@ class LogFileHandler(FileSystemEventHandler):
         logging.info(f"Opening file {watcher.path}")
         self.watcher = watcher
         self._file = open(watcher.path, 'r')
+        self._inode = os.fstat(self._file.fileno()).st_ino
         self._file.seek(0, 2)  # Jump to end of file
 
     def on_modified(self, event):
         logging.info(f"Reading from handle: {self._file.name}")
         logging.info(f"File modified: {event.src_path}")
         if event.src_path != self.watcher.path:
+            return
+        try:
+            current_inode = os.stat(self.watcher.path).st_ino
+            if current_inode != self._inode:
+                logging.info(f"Detected rotation for {self.watcher.path}. Reopening.")
+                self._file.close()
+                self._file = open(self.watcher.path, 'r')
+                self._inode = current_inode
+        except Exception as e:
+            logging.error(f"Error checking inode for {self.watcher.path}: {e}")
             return
         while True:
             line = self._file.readline()
