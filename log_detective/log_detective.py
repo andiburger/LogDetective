@@ -110,11 +110,14 @@ class RuleWatcher:
 
 class LogFileHandler(FileSystemEventHandler):
     def __init__(self, watcher):
+        logging.info(f"Opening file {watcher.path}")
         self.watcher = watcher
         self._file = open(watcher.path, 'r')
         self._file.seek(0, 2)  # Jump to end of file
 
     def on_modified(self, event):
+        logging.info(f"Reading from handle: {self._file.name}")
+        logging.info(f"File modified: {event.src_path}")
         if event.src_path != self.watcher.path:
             return
         while True:
