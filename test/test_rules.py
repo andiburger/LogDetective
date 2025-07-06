@@ -70,6 +70,57 @@ class TestRuleMatching(unittest.TestCase):
         results = watcher.check_line(line)
         self.assertTrue(any(r[0] == "critical" for r in results))
 
+    def test_ssh_suspicious(self):
+        watcher = RuleWatcher(
+            "/var/log/auth.log",
+            "rules/ssh.yaml",
+            1,
+            {"host": "localhost", "topic_base": "log"},
+            None,
+        )
+        line = "Jul  4 00:00:02 raspberrypi sshd[12345]: Connection closed by authenticating user"
+        results = watcher.check_line(line)
+        self.assertTrue(any(r[0] == "suspicious" for r in results))
+
+    def test_no_match(self):
+        watcher = RuleWatcher(
+            "/var/log/empty.log",
+            "rules/ssh.yaml",
+            1,
+            {"host": "localhost", "topic_base": "log"},
+            None,
+        )
+        line = "This line should not match anything."
+        results = watcher.check_line(line)
+        self.assertEqual(len(results), 0)
+
+    @patch("log_detective.log_detective.requests.post")
+    def test_send_influxdb_success(self, mock_post):
+        mock_post.return_value.status_code = 204
+
+        watcher = RuleWatcher(
+            path="/var/log/test.log",
+            rule_file="rules/ssh.yaml",
+            verbosity=1,
+            mqtt_config={"host": "localhost", "topic_base": "log"},
+            influxdb_config={"host": "localhost", "port": 8086, "database": "testdb"},
+        )
+        watcher.send_influxdb("critical", "This is a test message")
+
+        mock_post.assert_called_once()
+
+    def test_rule_reload(self):
+        watcher = RuleWatcher(
+            "/var/log/test.log",
+            "rules/ssh.yaml",
+            1,
+            {"host": "localhost", "topic_base": "log"},
+            None,
+        )
+        initial_rules = watcher.rules
+        watcher._load_rules()  # Triggert Reload
+        self.assertEqual(initial_rules, watcher.rules)
+
 
 class TestMQTTSend(unittest.TestCase):
     @patch("log_detective.log_detective.publish.single")
@@ -90,7 +141,4 @@ class TestMQTTSend(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
-if __name__ == "__main__":
-    unittest.main()
     unittest.main()
