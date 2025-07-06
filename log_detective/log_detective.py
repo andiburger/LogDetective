@@ -9,7 +9,7 @@ import paho.mqtt.publish as publish # type: ignore
 from watchdog.observers import Observer # type: ignore
 from watchdog.events import FileSystemEventHandler # type: ignore
 from hashlib import md5
-import requests
+import requests  # type: ignore
 
 PID_FILE = "/var/run/log_detective.pid"
 CONFIG_FILE = "config.yaml"

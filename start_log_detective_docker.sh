@@ -8,6 +8,7 @@ docker run -d \
   -v /var/log/auth.log:/var/log/auth.log:ro \
   -v /var/log/ufw.log:/var/log/ufw.log:ro \
   -v /var/log/fail2ban.log:/var/log/fail2ban.log:ro \
+  -v /minecraft/logs:/minecraft/logs:ro \
   -v "$(pwd)/config.yaml:/app/config.yaml:ro" \
   -v "$(pwd)/rules:/app/rules:ro" \
   --network host \

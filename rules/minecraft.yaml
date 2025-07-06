@@ -1,11 +1,33 @@
 critical:
-  - ".*Exception in server tick loop.*"
-  - ".*java\\.lang\\.NullPointerException.*"
-  - ".*Connection reset by peer.*"
-  - ".*Too many login attempts.*"
-  - ".*Failed to verify username.*"
+  # Security/Exploit scans (Dynmap & HTTP)
+  - ".*GET /\\.git/.*"
+  - ".*GET /\\.env.*"
+  - ".*GET /etc/passwd.*"
+  - ".*GET /wp-login\\.php.*"
+  - ".*GET /admin.*"
+  - ".*GET /cgi-bin.*"
+  - ".*GET /\\?cmd=.*"
+  - ".*GET .*\\.php.*"
+  - ".*GET .*\\.bak.*"
+  - ".*GET /vendor/.*"
+
+  # Failed login or banned player events (vanilla/Spigot)
+  - ".*lost connection: You are banned from this server"
+  - ".*UUID of player .* is .* \\(duplicate login\\)"
+  - ".*Player .* was kicked for suspicious activity"
+  - ".*kicked .* due to .*"
 
 suspicious:
-  - ".*UUID of player.*"
+  # Dynmap access
+  - ".*GET /tiles/.*"
+  - ".*GET /js/.*"
+  - ".*GET /standalone/.*"
+  - ".*GET /favicon\\.ico.*"
+  - ".*GET /robots\\.txt.*"
+  - ".*HEAD /.*"
+
+  # Minecraft login/logout/info
+  - ".*joined the game"
+  - ".*left the game"
+  - ".*issued server command:.*"
   - ".*logged in with entity id.*"
-  - ".*Connection lost.*"
