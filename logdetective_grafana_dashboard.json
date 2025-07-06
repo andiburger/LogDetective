@@ -1,0 +1,434 @@
+{
+    "annotations": {
+        "list": [
+            {
+                "builtIn": 1,
+                "datasource": "-- Grafana --",
+                "enable": true,
+                "hide": true,
+                "iconColor": "rgba(0, 211, 255, 1)",
+                "name": "Annotations & Alerts",
+                "type": "dashboard"
+            }
+        ]
+    },
+    "description": "Dashboard for LogDetective including top IPs and geo map",
+    "editable": true,
+    "gnetId": null,
+    "graphTooltip": 0,
+    "id": null,
+    "iteration": 1680080000000,
+    "links": [],
+    "panels": [
+        {
+            "datasource": "InfluxDB",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "red",
+                                "value": 5
+                            }
+                        ]
+                    }
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 0
+            },
+            "id": 1,
+            "options": {
+                "legend": {
+                    "displayMode": "list",
+                    "placement": "bottom"
+                },
+                "tooltip": {
+                    "mode": "single"
+                }
+            },
+            "targets": [
+                {
+                    "alias": "{{level}} - {{logfile}}",
+                    "groupBy": [
+                        {
+                            "type": "time",
+                            "params": [
+                                "$__interval"
+                            ]
+                        },
+                        {
+                            "type": "tag",
+                            "params": [
+                                "level"
+                            ]
+                        },
+                        {
+                            "type": "tag",
+                            "params": [
+                                "logfile"
+                            ]
+                        }
+                    ],
+                    "measurement": "log_event",
+                    "orderByTime": "ASC",
+                    "policy": "default",
+                    "refId": "A",
+                    "resultFormat": "time_series",
+                    "select": [
+                        [
+                            {
+                                "type": "field",
+                                "params": [
+                                    "value"
+                                ]
+                            },
+                            {
+                                "type": "mean"
+                            }
+                        ]
+                    ],
+                    "tags": []
+                }
+            ],
+            "title": "Log Events Over Time",
+            "type": "timeseries"
+        },
+        {
+            "datasource": "InfluxDB",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "orange",
+                                "value": 3
+                            },
+                            {
+                                "color": "red",
+                                "value": 10
+                            }
+                        ]
+                    }
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 0
+            },
+            "id": 2,
+            "options": {
+                "legend": {
+                    "displayMode": "list",
+                    "placement": "bottom"
+                },
+                "pieType": "donut"
+            },
+            "targets": [
+                {
+                    "alias": "{{level}}",
+                    "groupBy": [
+                        {
+                            "type": "tag",
+                            "params": [
+                                "level"
+                            ]
+                        }
+                    ],
+                    "measurement": "log_event",
+                    "orderByTime": "ASC",
+                    "policy": "default",
+                    "refId": "B",
+                    "resultFormat": "table",
+                    "select": [
+                        [
+                            {
+                                "type": "field",
+                                "params": [
+                                    "value"
+                                ]
+                            },
+                            {
+                                "type": "sum"
+                            }
+                        ]
+                    ],
+                    "tags": []
+                }
+            ],
+            "title": "Events by Level",
+            "type": "piechart"
+        },
+        {
+            "datasource": "InfluxDB",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    }
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 24,
+                "x": 0,
+                "y": 8
+            },
+            "id": 3,
+            "options": {
+                "showHeader": true
+            },
+            "targets": [
+                {
+                    "alias": "{{logfile}}",
+                    "groupBy": [
+                        {
+                            "type": "tag",
+                            "params": [
+                                "logfile"
+                            ]
+                        },
+                        {
+                            "type": "tag",
+                            "params": [
+                                "level"
+                            ]
+                        }
+                    ],
+                    "measurement": "log_event",
+                    "orderByTime": "DESC",
+                    "policy": "default",
+                    "refId": "C",
+                    "resultFormat": "table",
+                    "select": [
+                        [
+                            {
+                                "type": "field",
+                                "params": [
+                                    "value"
+                                ]
+                            },
+                            {
+                                "type": "sum"
+                            }
+                        ]
+                    ],
+                    "tags": []
+                }
+            ],
+            "title": "Events by Logfile",
+            "type": "table"
+        },
+        {
+            "datasource": "InfluxDB",
+            "description": "Top 10 IP Addresses with most log events",
+            "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 16
+            },
+            "id": 4,
+            "options": {
+                "showHeader": true,
+                "sortBy": [
+                    {
+                        "desc": true,
+                        "displayName": "Value"
+                    }
+                ]
+            },
+            "targets": [
+                {
+                    "measurement": "log_event",
+                    "groupBy": [
+                        {
+                            "type": "tag",
+                            "params": [
+                                "ip"
+                            ]
+                        }
+                    ],
+                    "select": [
+                        [
+                            {
+                                "type": "field",
+                                "params": [
+                                    "value"
+                                ]
+                            },
+                            {
+                                "type": "sum"
+                            }
+                        ]
+                    ],
+                    "orderByTime": "ASC",
+                    "policy": "default",
+                    "refId": "D",
+                    "resultFormat": "table",
+                    "tags": []
+                }
+            ],
+            "title": "Top 10 IP Addresses",
+            "type": "table"
+        },
+        {
+            "datasource": "InfluxDB",
+            "description": "Geolocation of critical IP addresses",
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {},
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            }
+                        ]
+                    }
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "h": 12,
+                "w": 12,
+                "x": 12,
+                "y": 16
+            },
+            "id": 5,
+            "options": {
+                "circleMaxSize": 30,
+                "color": "red",
+                "colorScale": "sqrt",
+                "enableClick": true,
+                "enableRegionZoom": true,
+                "enableTooltip": true,
+                "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                },
+                "legend": {
+                    "show": true,
+                    "side": "bottom"
+                },
+                "maxCircleSize": 30,
+                "metrics": [
+                    "sum"
+                ],
+                "sizeBy": "value",
+                "tooltipTemplate": "{{ip}}: {{value}} events",
+                "unitSingular": " event",
+                "unitPlural": " events",
+                "zoom": 2
+            },
+            "pluginVersion": "7.1.1",
+            "targets": [
+                {
+                    "groupBy": [
+                        {
+                            "type": "tag",
+                            "params": [
+                                "ip"
+                            ]
+                        }
+                    ],
+                    "measurement": "log_event",
+                    "policy": "default",
+                    "refId": "E",
+                    "resultFormat": "time_series",
+                    "select": [
+                        [
+                            {
+                                "type": "field",
+                                "params": [
+                                    "value"
+                                ]
+                            },
+                            {
+                                "type": "sum"
+                            }
+                        ]
+                    ],
+                    "tags": [
+                        {
+                            "key": "level",
+                            "operator": "=",
+                            "value": "critical"
+                        }
+                    ]
+                }
+            ],
+            "title": "Critical IP Geolocation",
+            "type": "grafana-worldmap-panel"
+        }
+    ],
+    "schemaVersion": 37,
+    "style": "dark",
+    "tags": [
+        "logdetective",
+        "logs",
+        "security"
+    ],
+    "templating": {
+        "list": [
+            {
+                "allValue": null,
+                "current": {},
+                "datasource": "InfluxDB",
+                "definition": "SHOW TAG VALUES WITH KEY = \"logfile\"",
+                "hide": 0,
+                "includeAll": true,
+                "label": "Logfile",
+                "multi": true,
+                "name": "logfile",
+                "options": [],
+                "query": "SHOW TAG VALUES WITH KEY = \"logfile\"",
+                "refresh": 1,
+                "regex": "",
+                "skipUrlSync": false,
+                "type": "query"
+            }
+        ]
+    },
+    "time": {
+        "from": "now-6h",
+        "to": "now"
+    },
+    "timepicker": {},
+    "title": "LogDetective Dashboard",
+    "uid": "logdetective-dashboard",
+    "version": 1
+}

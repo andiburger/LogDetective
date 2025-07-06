@@ -143,7 +143,11 @@ class RuleWatcher:
         if not influx_cfg:
             return
         try:
-            line = f"log_event,logfile={os.path.basename(self.path)},level={level} value=1"
+            # Extract IPv4 or IPv6 address from the message if present
+            ip_match = re.search(r"(\d{1,3}(?:\.\d{1,3}){3}|[0-9a-fA-F:]+)", message)
+            ip_tag = f",ip={ip_match.group(0)}" if ip_match else ""
+
+            line = f"log_event,logfile={os.path.basename(self.path)},level={level}{ip_tag} value=1"
             response = requests.post(
                 f"http://{influx_cfg['host']}:{influx_cfg.get('port', 8086)}/write",
                 params={

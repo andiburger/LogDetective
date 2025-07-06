@@ -4,7 +4,7 @@ mqtt:
   topic_base: "logdetective"
   client_id: "logdetective-rpi5"
 influxdb:
-  host: 192.168.178.120
+  host: "192.168.178.120"
   port: 8086
   database: logdetective
   username: loguser
@@ -25,6 +25,6 @@ logs:
   - path: "/var/log/fail2ban.log"
     rule_file: "rules/fail2ban.yaml"
     mqtt_topic: "logdetective/fail2ban"
-  - path: /minecraft/logs/latest.log
-    rule_file: rules/minecraft.yaml
+  - path: "/minecraft/logs/latest.log"
+    rule_file: "rules/minecraft.yaml"
     mqtt_topic: "logdetective/minecraft"
