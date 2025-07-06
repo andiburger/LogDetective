@@ -292,6 +292,7 @@ class LogFileHandler(FileSystemEventHandler):
                             if self.watcher.mqtt_config.get("username")
                             else None
                         ),
+                        retain=True,
                     )
                     logging.info(f"Published logrotate status for {self.watcher.path}")
                 except Exception as e:
@@ -339,6 +340,7 @@ def start_monitoring() -> None:
                 if mqtt_config.get("username")
                 else None
             ),
+            retain=True,
         )
         logging.info("Published startup status message to MQTT.")
     except Exception as e:
