@@ -18,7 +18,7 @@ PID_FILE = "/var/run/log_detective.pid"
 CONFIG_FILE = "config.yaml"
 LOG_FILE = "log_detective.log"
 
-# Setup logging to file and console
+# Setup logging to both file and console with timestamps and level info
 file_handler = logging.FileHandler(LOG_FILE)
 file_handler.setLevel(logging.INFO)
 file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
@@ -31,32 +31,55 @@ logging.getLogger().setLevel(logging.INFO)
 logging.getLogger().addHandler(file_handler)
 logging.getLogger().addHandler(console_handler)
 
-# Global stop flag
+# Global flag to control main loop
 running: bool = True
 
 
 def write_pid() -> None:
+    """
+    Write the current process ID to a PID file.
+    Useful for process management.
+    """
     with open(PID_FILE, "w") as f:
         f.write(str(os.getpid()))
 
 
 def handle_shutdown(signum: int, frame: Optional[FrameType]) -> None:
+    """
+    Signal handler for graceful shutdown on SIGINT and SIGTERM.
+    Sets the global running flag to False to exit main loop.
+    """
     global running
     logging.info("Shutdown signal received.")
     running = False
-    running = False
 
 
+# Register signal handlers for termination signals
 signal.signal(signal.SIGTERM, handle_shutdown)
 signal.signal(signal.SIGINT, handle_shutdown)
 
 
 def load_rules(rule_file: str) -> Dict[str, Any]:
+    """
+    Load YAML rule definitions from a file.
+
+    Args:
+        rule_file: Path to the YAML rules file.
+
+    Returns:
+        Dictionary parsed from YAML with rule patterns.
+    """
     with open(rule_file, "r") as f:
         return yaml.safe_load(f)
 
 
 class RuleWatcher:
+    """
+    Watches a log file for new lines and applies regex-based rules
+    to detect suspicious or critical log entries.
+    Can send notifications to MQTT and metrics to InfluxDB.
+    """
+
     def __init__(
         self,
         path: str,
@@ -65,6 +88,16 @@ class RuleWatcher:
         mqtt_config: Dict[str, Any],
         influxdb_config: Optional[Dict[str, Any]],
     ) -> None:
+        """
+        Initialize RuleWatcher instance.
+
+        Args:
+            path: Path to the log file to watch.
+            rule_file: Path to YAML file with regex rules.
+            verbosity: Verbosity level for notifications.
+            mqtt_config: Configuration dictionary for MQTT.
+            influxdb_config: Optional configuration for InfluxDB.
+        """
         self.path: str = path
         self.rule_file: str = rule_file
         self.verbosity: int = verbosity
@@ -75,6 +108,10 @@ class RuleWatcher:
         self._load_rules()
 
     def _load_rules(self) -> None:
+        """
+        Load and compile regex patterns from the rule file.
+        Only reload if file content changed (detected via md5 hash).
+        """
         try:
             with open(self.rule_file, "rb") as f:
                 current_hash = md5(f.read()).hexdigest()
@@ -95,6 +132,15 @@ class RuleWatcher:
             logging.error(f"Error loading rules from {self.rule_file}: {e}")
 
     def check_line(self, line: str) -> List[Tuple[str, str]]:
+        """
+        Check a single log line against all compiled regex rules.
+
+        Args:
+            line: Log line to check.
+
+        Returns:
+            List of tuples (level, matched_line) for all matches.
+        """
         self._load_rules()
         results: List[Tuple[str, str]] = []
         for rule_type in ("critical", "suspicious"):
@@ -104,6 +150,13 @@ class RuleWatcher:
         return results
 
     def send_mqtt(self, level: str, message: str) -> None:
+        """
+        Publish a JSON payload about a log event to the MQTT broker.
+
+        Args:
+            level: Severity level ('critical' or 'suspicious').
+            message: The matched log message.
+        """
         topic = f"{self.mqtt_config['topic_base']}"
         try:
             topic = f"{self.mqtt_config['topic_base']}/{os.path.basename(self.path).replace('.log','')}/{level}"
@@ -124,10 +177,16 @@ class RuleWatcher:
                 hostname=self.mqtt_config["host"],
                 port=self.mqtt_config.get("port", 1883),
             )
-            print(f"MQTT publish failed: {e}")
             logging.error(f"MQTT publish failed: {e}")
 
     def process_line(self, line: str) -> None:
+        """
+        Process a new log line: check against rules, log matches,
+        and send notifications to MQTT and InfluxDB if needed.
+
+        Args:
+            line: New line read from the log file.
+        """
         logging.info(f"Processing line: {line.strip()}")
         findings = self.check_line(line)
         logging.info(f"check_line result: {findings}")
@@ -139,6 +198,13 @@ class RuleWatcher:
                 self.send_influxdb(level, msg)
 
     def send_influxdb(self, level: str, message: str) -> None:
+        """
+        Send a log event metric to InfluxDB with optional IP tag extraction.
+
+        Args:
+            level: Severity level.
+            message: Log message text.
+        """
         influx_cfg = self.influxdb_config
         if not influx_cfg:
             return
@@ -167,14 +233,32 @@ class RuleWatcher:
 
 
 class LogFileHandler(FileSystemEventHandler):
+    """
+    FileSystemEventHandler subclass that reads new lines from a
+    monitored log file and passes them to a RuleWatcher instance.
+    """
+
     def __init__(self, watcher: RuleWatcher) -> None:
+        """
+        Initialize the handler and open the log file for reading.
+
+        Args:
+            watcher: RuleWatcher instance associated with the log file.
+        """
         logging.info(f"Opening file {watcher.path}")
         self.watcher: RuleWatcher = watcher
         self._file = open(watcher.path, "r")
         self._inode = os.fstat(self._file.fileno()).st_ino
-        self._file.seek(0, 2)  # Jump to end of file
+        self._file.seek(0, 2)  # Seek to end of file to read only new lines
 
     def on_modified(self, event: Any) -> None:
+        """
+        Called by watchdog when a file is modified.
+        Reads new lines and processes them via RuleWatcher.
+
+        Args:
+            event: File system event object.
+        """
         logging.info(f"Reading from handle: {self._file.name}")
         logging.info(f"File modified: {event.src_path}")
         if event.src_path != self.watcher.path:
@@ -225,6 +309,10 @@ class LogFileHandler(FileSystemEventHandler):
 
 
 def start_monitoring() -> None:
+    """
+    Main entry point: Load configuration, initialize watchers and observers,
+    start monitoring all configured log files until shutdown signal.
+    """
     with open(CONFIG_FILE, "r") as f:
         config = yaml.safe_load(f)
 
@@ -232,7 +320,7 @@ def start_monitoring() -> None:
     influxdb_config: Optional[Dict[str, Any]] = config.get("influxdb")
     verbosity: int = config.get("verbosity", 1)
 
-    # Send MQTT status message on startup
+    # Publish startup status message to MQTT
     try:
         status_payload = json.dumps(
             {
