@@ -5,6 +5,8 @@ import re
 import signal
 import time
 from hashlib import md5
+from types import FrameType
+from typing import Any, Dict, List, Optional, Tuple
 
 import paho.mqtt.publish as publish  # type: ignore
 import requests  # type: ignore
@@ -30,17 +32,18 @@ logging.getLogger().addHandler(file_handler)
 logging.getLogger().addHandler(console_handler)
 
 # Global stop flag
-running = True
+running: bool = True
 
 
-def write_pid():
+def write_pid() -> None:
     with open(PID_FILE, "w") as f:
         f.write(str(os.getpid()))
 
 
-def handle_shutdown(signum, frame):
+def handle_shutdown(signum: int, frame: Optional[FrameType]) -> None:
     global running
     logging.info("Shutdown signal received.")
+    running = False
     running = False
 
 
@@ -48,32 +51,39 @@ signal.signal(signal.SIGTERM, handle_shutdown)
 signal.signal(signal.SIGINT, handle_shutdown)
 
 
-def load_rules(rule_file):
+def load_rules(rule_file: str) -> Dict[str, Any]:
     with open(rule_file, "r") as f:
         return yaml.safe_load(f)
 
 
 class RuleWatcher:
-    def __init__(self, path, rule_file, verbosity, mqtt_config, influxdb_config):
-        self.path = path
-        self.rule_file = rule_file
-        self.verbosity = verbosity
-        self.mqtt_config = mqtt_config
-        self.influxdb_config = influxdb_config
-        self.rules_hash = None
-        self.rules = {}
+    def __init__(
+        self,
+        path: str,
+        rule_file: str,
+        verbosity: int,
+        mqtt_config: Dict[str, Any],
+        influxdb_config: Optional[Dict[str, Any]],
+    ) -> None:
+        self.path: str = path
+        self.rule_file: str = rule_file
+        self.verbosity: int = verbosity
+        self.mqtt_config: Dict[str, Any] = mqtt_config
+        self.influxdb_config: Optional[Dict[str, Any]] = influxdb_config
+        self.rules_hash: Optional[str] = None
+        self.rules: Dict[str, List[re.Pattern]] = {}
         self._load_rules()
 
-    def _load_rules(self):
+    def _load_rules(self) -> None:
         try:
             with open(self.rule_file, "rb") as f:
                 current_hash = md5(f.read()).hexdigest()
                 if current_hash != self.rules_hash:
                     raw_rules = load_rules(self.rule_file)
-                    compiled_rules = {}
+                    compiled_rules: Dict[str, List[re.Pattern]] = {}
                     for level in ("critical", "suspicious"):
                         compiled_rules[level] = []
-                        for pattern in raw_rules.get(level, []):
+                        for pattern in raw_rules.get(level, []):  # type: ignore
                             try:
                                 compiled_rules[level].append(re.compile(pattern))
                             except re.error as e:
@@ -84,16 +94,16 @@ class RuleWatcher:
         except Exception as e:
             logging.error(f"Error loading rules from {self.rule_file}: {e}")
 
-    def check_line(self, line):
+    def check_line(self, line: str) -> List[Tuple[str, str]]:
         self._load_rules()
-        results = []
+        results: List[Tuple[str, str]] = []
         for rule_type in ("critical", "suspicious"):
             for regex in self.rules.get(rule_type, []):
                 if regex.search(line):
                     results.append((rule_type, line.strip()))
         return results
 
-    def send_mqtt(self, level, message):
+    def send_mqtt(self, level: str, message: str) -> None:
         topic = f"{self.mqtt_config['topic_base']}"
         try:
             topic = f"{self.mqtt_config['topic_base']}/{os.path.basename(self.path).replace('.log','')}/{level}"
@@ -117,7 +127,7 @@ class RuleWatcher:
             print(f"MQTT publish failed: {e}")
             logging.error(f"MQTT publish failed: {e}")
 
-    def process_line(self, line):
+    def process_line(self, line: str) -> None:
         logging.info(f"Processing line: {line.strip()}")
         findings = self.check_line(line)
         logging.info(f"check_line result: {findings}")
@@ -128,7 +138,7 @@ class RuleWatcher:
                 self.send_mqtt(level, msg)
                 self.send_influxdb(level, msg)
 
-    def send_influxdb(self, level, message):
+    def send_influxdb(self, level: str, message: str) -> None:
         influx_cfg = self.influxdb_config
         if not influx_cfg:
             return
@@ -153,14 +163,14 @@ class RuleWatcher:
 
 
 class LogFileHandler(FileSystemEventHandler):
-    def __init__(self, watcher):
+    def __init__(self, watcher: RuleWatcher) -> None:
         logging.info(f"Opening file {watcher.path}")
-        self.watcher = watcher
+        self.watcher: RuleWatcher = watcher
         self._file = open(watcher.path, "r")
         self._inode = os.fstat(self._file.fileno()).st_ino
         self._file.seek(0, 2)  # Jump to end of file
 
-    def on_modified(self, event):
+    def on_modified(self, event: Any) -> None:
         logging.info(f"Reading from handle: {self._file.name}")
         logging.info(f"File modified: {event.src_path}")
         if event.src_path != self.watcher.path:
@@ -210,13 +220,13 @@ class LogFileHandler(FileSystemEventHandler):
             self.watcher.process_line(line)
 
 
-def start_monitoring():
+def start_monitoring() -> None:
     with open(CONFIG_FILE, "r") as f:
         config = yaml.safe_load(f)
 
-    mqtt_config = config["mqtt"]
-    influxdb_config = config.get("influxdb")
-    verbosity = config.get("verbosity", 1)
+    mqtt_config: Dict[str, Any] = config["mqtt"]
+    influxdb_config: Optional[Dict[str, Any]] = config.get("influxdb")
+    verbosity: int = config.get("verbosity", 1)
 
     # Send MQTT status message on startup
     try:
@@ -242,7 +252,7 @@ def start_monitoring():
     except Exception as e:
         logging.error(f"Failed to publish startup status message: {e}")
 
-    observers = []
+    observers: List[Observer] = []
 
     for log_cfg in config["logs"]:
         watcher = RuleWatcher(
@@ -267,5 +277,4 @@ def start_monitoring():
 
 if __name__ == "__main__":
     write_pid()
-    start_monitoring()
     start_monitoring()
