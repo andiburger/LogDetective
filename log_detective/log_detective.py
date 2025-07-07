@@ -8,14 +8,15 @@ from hashlib import md5
 from types import FrameType
 from typing import Any, Dict, List, Optional, Tuple
 
-import geoip2.database
+import geoip2.database  # type: ignore
 import paho.mqtt.publish as publish  # type: ignore
 import requests  # type: ignore
 import yaml  # type: ignore
 from watchdog.events import FileSystemEventHandler  # type: ignore
 from watchdog.observers import Observer  # type: ignore
 
-geoip_reader = geoip2.database.Reader("/usr/share/GeoIP/GeoLite2-City.mmdb")
+geoip_reader = None
+GEOIP_DEFAULT_PATH = "/usr/share/GeoIP/GeoLite2-City.mmdb"
 
 PID_FILE = "/var/run/log_detective.pid"
 CONFIG_FILE = "config.yaml"
@@ -90,6 +91,7 @@ class RuleWatcher:
         verbosity: int,
         mqtt_config: Dict[str, Any],
         influxdb_config: Optional[Dict[str, Any]],
+        use_geoip: bool = False,
     ) -> None:
         """
         Initialize RuleWatcher instance.
@@ -100,6 +102,7 @@ class RuleWatcher:
             verbosity: Verbosity level for notifications.
             mqtt_config: Configuration dictionary for MQTT.
             influxdb_config: Optional configuration for InfluxDB.
+            use_geoip: Whether to use GeoIP lookups.
         """
         self.path: str = path
         self.rule_file: str = rule_file
@@ -108,6 +111,7 @@ class RuleWatcher:
         self.influxdb_config: Optional[Dict[str, Any]] = influxdb_config
         self.rules_hash: Optional[str] = None
         self.rules: Dict[str, List[re.Pattern]] = {}
+        self.use_geoip: bool = use_geoip
         self._load_rules()
 
     def _load_rules(self) -> None:
@@ -220,17 +224,18 @@ class RuleWatcher:
             if ip_match:
                 ip = ip_match.group(0)
                 ip_tag = f",ip={ip}"
-                try:
-                    city = geoip_reader.city(ip)
-                    if (
-                        city.location
-                        and city.location.latitude is not None
-                        and city.location.longitude is not None
-                    ):
-                        geo_lat_tag = f",geo_lat={city.location.latitude}"
-                        geo_lon_tag = f",geo_lon={city.location.longitude}"
-                except Exception as e:
-                    logging.error(f"GeoIP lookup failed for IP {ip}: {e}")
+                if self.use_geoip and geoip_reader:
+                    try:
+                        city = geoip_reader.city(ip)
+                        if (
+                            city.location
+                            and city.location.latitude is not None
+                            and city.location.longitude is not None
+                        ):
+                            geo_lat_tag = f",geo_lat={city.location.latitude}"
+                            geo_lon_tag = f",geo_lon={city.location.longitude}"
+                    except Exception as e:
+                        logging.error(f"GeoIP lookup failed for IP {ip}: {e}")
 
             line = f"log_event,logfile={os.path.basename(self.path)},level={level}{ip_tag}{geo_lat_tag}{geo_lon_tag} value=1"
             response = requests.post(
@@ -339,6 +344,18 @@ def start_monitoring() -> None:
     mqtt_config: Dict[str, Any] = config["mqtt"]
     influxdb_config: Optional[Dict[str, Any]] = config.get("influxdb")
     verbosity: int = config.get("verbosity", 1)
+    use_geoip: bool = config.get("use_geoip", False)
+    geoip_path: str = config.get("geoip_path", GEOIP_DEFAULT_PATH)
+
+    # Initialize GeoIP reader if enabled
+    global geoip_reader
+    if use_geoip:
+        try:
+            geoip_reader = geoip2.database.Reader(geoip_path)
+            logging.info(f"GeoIP lookup enabled using {geoip_path}.")
+        except Exception as e:
+            geoip_reader = None
+            logging.error(f"Failed to load GeoIP database from {geoip_path}: {e}")
 
     # Publish startup status message to MQTT
     try:
@@ -369,7 +386,12 @@ def start_monitoring() -> None:
 
     for log_cfg in config["logs"]:
         watcher = RuleWatcher(
-            log_cfg["path"], log_cfg["rule_file"], verbosity, mqtt_config, influxdb_config
+            log_cfg["path"],
+            log_cfg["rule_file"],
+            verbosity,
+            mqtt_config,
+            influxdb_config,
+            use_geoip,
         )
         event_handler = LogFileHandler(watcher)
         observer = Observer()

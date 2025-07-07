@@ -10,6 +10,9 @@ influxdb:
   username: loguser
   password: logpass
 
+use_geoip: true  # Enable GeoIP lookup for IP addresses found in logs
+geoip_path: /usr/share/GeoIP/GeoLite2-City.mmdb  # Optional override path
+
 verbosity: 1  # 0 = only critical, 1 = suspicious, 2 = all
 
 logs:
