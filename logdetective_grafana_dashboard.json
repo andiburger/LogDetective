@@ -306,19 +306,7 @@
             "datasource": "InfluxDB",
             "description": "Geolocation of critical IP addresses",
             "fieldConfig": {
-                "defaults": {
-                    "custom": {},
-                    "mappings": [],
-                    "thresholds": {
-                        "mode": "absolute",
-                        "steps": [
-                            {
-                                "color": "green",
-                                "value": null
-                            }
-                        ]
-                    }
-                },
+                "defaults": {},
                 "overrides": []
             },
             "gridPos": {
@@ -329,46 +317,40 @@
             },
             "id": 5,
             "options": {
-                "circleMaxSize": 30,
-                "color": "red",
-                "colorScale": "sqrt",
-                "enableClick": true,
-                "enableRegionZoom": true,
-                "enableTooltip": true,
-                "hideFrom": {
-                    "legend": false,
-                    "tooltip": false,
-                    "viz": false
+                "controls": {
+                    "showZoom": true,
+                    "showAttribution": false
                 },
-                "legend": {
-                    "show": true,
-                    "side": "bottom"
-                },
-                "maxCircleSize": 30,
-                "metrics": [
-                    "sum"
-                ],
-                "sizeBy": "value",
-                "tooltipTemplate": "{{ip}}: {{value}} events",
-                "unitSingular": " event",
-                "unitPlural": " events",
-                "zoom": 2
+                "layers": [
+                    {
+                        "type": "markers",
+                        "config": {
+                            "latField": "geo_lat",
+                            "lonField": "geo_lon",
+                            "showLegend": true,
+                            "radius": 10,
+                            "color": {
+                                "fixedColor": "red"
+                            },
+                            "tooltip": {
+                                "mode": "all",
+                                "fields": [
+                                    "ip",
+                                    "value",
+                                    "logfile"
+                                ]
+                            }
+                        }
+                    }
+                ]
             },
-            "pluginVersion": "7.1.1",
             "targets": [
                 {
-                    "groupBy": [
-                        {
-                            "type": "tag",
-                            "params": [
-                                "ip"
-                            ]
-                        }
-                    ],
+                    "groupBy": [],
                     "measurement": "log_event",
                     "policy": "default",
                     "refId": "E",
-                    "resultFormat": "time_series",
+                    "resultFormat": "table",
                     "select": [
                         [
                             {
@@ -392,7 +374,151 @@
                 }
             ],
             "title": "Critical IP Geolocation",
-            "type": "grafana-worldmap-panel"
+            "type": "geomap"
+        },
+        {
+            "datasource": "InfluxDB",
+            "description": "Top 10 IPs by count as bar chart",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    }
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 28
+            },
+            "id": 6,
+            "options": {
+                "orientation": "horizontal",
+                "showValue": "auto",
+                "barAlignment": 0,
+                "legend": {
+                    "displayMode": "hidden"
+                },
+                "tooltip": {
+                    "mode": "single"
+                }
+            },
+            "targets": [
+                {
+                    "groupBy": [
+                        {
+                            "type": "tag",
+                            "params": [
+                                "ip"
+                            ]
+                        }
+                    ],
+                    "measurement": "log_event",
+                    "orderByTime": "DESC",
+                    "policy": "default",
+                    "refId": "F",
+                    "resultFormat": "table",
+                    "select": [
+                        [
+                            {
+                                "type": "field",
+                                "params": [
+                                    "value"
+                                ]
+                            },
+                            {
+                                "type": "sum"
+                            }
+                        ]
+                    ],
+                    "tags": [],
+                    "limit": 10
+                }
+            ],
+            "title": "Top 10 IPs (Bar Chart)",
+            "type": "barchart"
+        },
+        {
+            "datasource": "InfluxDB",
+            "description": "Shows number of events in last 5 minutes",
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "mappings": [],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "orange",
+                                "value": 10
+                            },
+                            {
+                                "color": "red",
+                                "value": 50
+                            }
+                        ]
+                    }
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 12,
+                "x": 12,
+                "y": 28
+            },
+            "id": 7,
+            "options": {
+                "reduceOptions": {
+                    "calcs": [
+                        "sum"
+                    ],
+                    "fields": "",
+                    "values": false
+                },
+                "orientation": "auto",
+                "textMode": "auto"
+            },
+            "targets": [
+                {
+                    "measurement": "log_event",
+                    "policy": "default",
+                    "refId": "G",
+                    "resultFormat": "time_series",
+                    "select": [
+                        [
+                            {
+                                "type": "field",
+                                "params": [
+                                    "value"
+                                ]
+                            },
+                            {
+                                "type": "sum"
+                            }
+                        ]
+                    ],
+                    "tags": [],
+                    "groupBy": [
+                        {
+                            "type": "time",
+                            "params": [
+                                "5m"
+                            ]
+                        }
+                    ]
+                }
+            ],
+            "title": "Events in Last 5 Minutes",
+            "type": "stat"
         }
     ],
     "schemaVersion": 37,

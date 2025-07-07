@@ -13,6 +13,7 @@ services:
       - /var/log/fail2ban:/var/log/fail2ban:ro
       - ${PWD}/config.yml:/app/config.yml:ro
       - ${PWD}/rules:/app/rules:ro
+      - /etc/log_detective/geoip:/usr/share/GeoIP:ro
     network_mode: host
     environment:
       - PYTHONUNBUFFERED=1

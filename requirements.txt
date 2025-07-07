@@ -2,3 +2,4 @@ paho-mqtt
 PyYAML
 watchdog
 requests
+geoip2

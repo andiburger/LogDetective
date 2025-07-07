@@ -8,11 +8,14 @@ from hashlib import md5
 from types import FrameType
 from typing import Any, Dict, List, Optional, Tuple
 
+import geoip2.database
 import paho.mqtt.publish as publish  # type: ignore
 import requests  # type: ignore
 import yaml  # type: ignore
 from watchdog.events import FileSystemEventHandler  # type: ignore
 from watchdog.observers import Observer  # type: ignore
+
+geoip_reader = geoip2.database.Reader("/usr/share/GeoIP/GeoLite2-City.mmdb")
 
 PID_FILE = "/var/run/log_detective.pid"
 CONFIG_FILE = "config.yaml"
@@ -211,9 +214,25 @@ class RuleWatcher:
         try:
             # Extract IPv4 or IPv6 address from the message if present
             ip_match = re.search(r"(\d{1,3}(?:\.\d{1,3}){3}|[0-9a-fA-F:]+)", message)
-            ip_tag = f",ip={ip_match.group(0)}" if ip_match else ""
+            ip_tag = ""
+            geo_lat_tag = ""
+            geo_lon_tag = ""
+            if ip_match:
+                ip = ip_match.group(0)
+                ip_tag = f",ip={ip}"
+                try:
+                    city = geoip_reader.city(ip)
+                    if (
+                        city.location
+                        and city.location.latitude is not None
+                        and city.location.longitude is not None
+                    ):
+                        geo_lat_tag = f",geo_lat={city.location.latitude}"
+                        geo_lon_tag = f",geo_lon={city.location.longitude}"
+                except Exception as e:
+                    logging.error(f"GeoIP lookup failed for IP {ip}: {e}")
 
-            line = f"log_event,logfile={os.path.basename(self.path)},level={level}{ip_tag} value=1"
+            line = f"log_event,logfile={os.path.basename(self.path)},level={level}{ip_tag}{geo_lat_tag}{geo_lon_tag} value=1"
             response = requests.post(
                 f"http://{influx_cfg['host']}:{influx_cfg.get('port', 8086)}/write",
                 params={

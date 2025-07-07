@@ -13,4 +13,7 @@ COPY rules/ ./rules/
 
 RUN mkdir -p /var/run /var/log/mumble-server /var/log/ufw /var/log/fail2ban
 
+# Create directory for GeoIP database (to be mounted from host)
+RUN mkdir -p /usr/share/GeoIP
+
 CMD ["python", "-m", "log_detective.log_detective"]
