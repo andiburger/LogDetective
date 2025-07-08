@@ -206,7 +206,7 @@ class RuleWatcher:
 
     def send_influxdb(self, level: str, message: str) -> None:
         """
-        Send a log event metric to InfluxDB with optional IP tag extraction.
+        Send a log event metric to InfluxDB with improved IP extraction.
 
         Args:
             level: Severity level.
@@ -216,8 +216,11 @@ class RuleWatcher:
         if not influx_cfg:
             return
         try:
-            # Extract IPv4 or IPv6 address from the message if present
-            ip_match = re.search(r"(\d{1,3}(?:\.\d{1,3}){3}|[0-9a-fA-F:]+)", message)
+            # Improved regex for IPv4 and IPv6 extraction with word boundaries
+            ip_match = re.search(
+                r"\b(?:(?:\d{1,3}\.){3}\d{1,3}|(?:[a-fA-F0-9:]+:+)+[a-fA-F0-9]+)\b",
+                message,
+            )
             ip_tag = ""
             geo_lat_tag = ""
             geo_lon_tag = ""

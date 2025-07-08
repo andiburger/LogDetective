@@ -1,3 +1,5 @@
+import os
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -140,5 +142,5 @@ class TestMQTTSend(unittest.TestCase):
         self.assertIn("Test critical message", kwargs["payload"])
 
 
-if __name__ == "__main__":
-    unittest.main()
+# Add project root to sys.path for pytest imports if needed
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
