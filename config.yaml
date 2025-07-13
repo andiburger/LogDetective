@@ -6,9 +6,9 @@ mqtt:
 influxdb:
   host: "192.168.178.120"
   port: 8086
-  database: logdetective
-  username: loguser
-  password: logpass
+  database: "logdetective"
+  username: "loguser"
+  password: "logpass"
 
 use_geoip: true  # Enable GeoIP lookup for IP addresses found in logs
 geoip_path: /usr/share/GeoIP/GeoLite2-City.mmdb  # Optional override path
