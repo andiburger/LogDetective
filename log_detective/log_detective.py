@@ -204,6 +204,38 @@ class RuleWatcher:
                 self.send_mqtt(level, msg)
                 self.send_influxdb(level, msg)
 
+    def extract_ip(self, line: str) -> Optional[str]:
+        """
+        Extract an IPv4 or IPv6 address from the log line using contextual patterns
+        (e.g., 'from', 'src=', 'client=') with fallback to generic regex.
+
+        Args:
+            line: The log line to search.
+
+        Returns:
+            The first IP address found or None.
+        """
+        patterns = [
+            r"\bfrom\s+(\d{1,3}(?:\.\d{1,3}){3})\b",
+            r"\bsrc=([\d\.]+)",
+            r"\bclient=([\d\.]+)",
+            r"\bhost=([\d\.]+)",
+            r"\[([a-fA-F0-9:]+)\]",  # common for IPv6 in brackets
+        ]
+        for pat in patterns:
+            match = re.search(pat, line)
+            if match:
+                return match.group(1)
+
+        # Fallback: any IPv4 or IPv6 address
+        generic_ip = re.search(
+            r"\b(?:(?:\d{1,3}\.){3}\d{1,3}|(?:[a-fA-F0-9:]+:+)+[a-fA-F0-9]+)\b",
+            line,
+        )
+        if generic_ip:
+            return generic_ip.group(0)
+        return None
+
     def send_influxdb(self, level: str, message: str) -> None:
         """
         Send a log event metric to InfluxDB with improved IP extraction.
@@ -216,17 +248,13 @@ class RuleWatcher:
         if not influx_cfg:
             return
         try:
-            # Improved regex for IPv4 and IPv6 extraction with word boundaries
-            ip_match = re.search(
-                r"\b(?:(?:\d{1,3}\.){3}\d{1,3}|(?:[a-fA-F0-9:]+:+)+[a-fA-F0-9]+)\b",
-                message,
-            )
+            ip = self.extract_ip(message)
             ip_tag = ""
             geo_lat_tag = ""
             geo_lon_tag = ""
-            if ip_match:
-                ip = ip_match.group(0)
+            if ip:
                 ip_tag = f",ip={ip}"
+                logging.debug(f"Extracted IP: {ip}")
                 if self.use_geoip and geoip_reader:
                     try:
                         city = geoip_reader.city(ip)
@@ -239,6 +267,8 @@ class RuleWatcher:
                             geo_lon_tag = f",geo_lon={city.location.longitude}"
                     except Exception as e:
                         logging.error(f"GeoIP lookup failed for IP {ip}: {e}")
+            else:
+                logging.warning(f"No IP address found in line: {message}")
 
             line = f"log_event,logfile={os.path.basename(self.path)},level={level}{ip_tag}{geo_lat_tag}{geo_lon_tag} value=1"
             response = requests.post(

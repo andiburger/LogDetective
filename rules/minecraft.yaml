@@ -11,6 +11,9 @@ critical:
   - ".*GET .*\\.bak.*"
   - ".*GET /vendor/.*"
 
+  # Known scan bot signature (e.g., MCScans)
+  - ".*INFO\\]: MCScans \\(/(?P<ip>\\d{1,3}(?:\\.\\d{1,3}){3}):\\d+\\) lost connection:.*"
+
   # Failed login or banned player events (vanilla/Spigot)
   - ".*lost connection: You are banned from this server"
   - ".*UUID of player .* is .* \\(duplicate login\\)"

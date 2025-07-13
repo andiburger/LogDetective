@@ -15,4 +15,3 @@ def test_send_mqtt_message():
     # Send a test MQTT message (can be mocked if needed)
     watcher.send_mqtt("critical", "Manual test message")
     print("MQTT message sent successfully.")
-    print("MQTT message sent successfully.")
