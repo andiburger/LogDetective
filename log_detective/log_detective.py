@@ -268,9 +268,10 @@ class RuleWatcher:
                     except Exception as e:
                         logging.error(f"GeoIP lookup failed for IP {ip}: {e}")
             else:
-                logging.warning(f"No IP address found in line: {message}")
+                logging.info(f"No IP found in line: {message} – sending without IP.")
 
             line = f"log_event,logfile={os.path.basename(self.path)},level={level}{ip_tag}{geo_lat_tag}{geo_lon_tag} value=1"
+            logging.debug(f"Influx line: {line}")
             response = requests.post(
                 f"http://{influx_cfg['host']}:{influx_cfg.get('port', 8086)}/write",
                 params={
