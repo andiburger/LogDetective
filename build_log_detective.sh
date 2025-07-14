@@ -25,9 +25,16 @@ esac
 
 show_help() {
   echo "Usage: $0 [version_tag] [--no-cache]"
-  echo "  version_tag  Optional version tag for Docker image (default: latest or git tag or timestamp)"
-  echo "  --no-cache   Build Docker image without using cache"
-  echo "  -h, --help   Show this help message"
+  echo ""
+  echo "Options:"
+  echo "  version_tag   Optional version tag for Docker image (default: git tag or timestamp)"
+  echo "  --no-cache    Build Docker image without using Docker cache"
+  echo "  -h, --help    Show this help message"
+  echo ""
+  echo "Examples:"
+  echo "  $0                  # Build with auto-detected version"
+  echo "  $0 1.0.1            # Build with version 1.0.1"
+  echo "  $0 1.0.1 --no-cache # Build with version 1.0.1 and no cache"
   exit 0
 }
 
@@ -64,14 +71,10 @@ if [ -z "$TAG" ]; then
 fi
 
 echo "Detected architecture: $ARCH → using platform: ${PLATFORM}"
-echo "Running tests before build..."
-
-pytest_output=$(pytest 2>&1)
-pytest_exit_code=$?
-
-echo "$pytest_output"
-
-if [ $pytest_exit_code -ne 0 ]; then
+echo "Running tests in Docker test container..."
+docker build -f test.Dockerfile -t log_detective_test .
+docker run --rm log_detective_test
+if [ $? -ne 0 ]; then
   echo "❌ Tests failed, aborting build."
   exit 1
 fi
@@ -93,3 +96,4 @@ else
   echo "❌ Build failed."
   exit 1
 fi
+# End of script
