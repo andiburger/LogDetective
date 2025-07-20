@@ -90,10 +90,24 @@ pid_file: "/var/run/log_detective.pid"
 
 ## Running
 
-Run the monitor with:
+Run LogDetective using the configuration file:
 ```bash
 python3 log_detective.py --config /path/to/config.yaml
 ```
+
+Or run in CLI mode (bypassing config.yaml):
+```bash
+python3 log_detective.py --logfile /var/log/auth.log --rules rules/ssh.yaml --mqtt --interactive
+```
+
+Use `--help` to list all available CLI options.
+
+The interactive CLI mode supports:
+- Listing current rules
+- Adding, disabling, deleting, restoring rules
+- Viewing recent log matches
+- Auto-reloading when rule file changes
+- Launching an editor to manually adjust rule files
 
 ## Docker Deployment
 
@@ -114,8 +128,32 @@ docker run -d \
   log_detective:latest
 ```
 
+### CLI Mode (Optional)
+
+You can also run LogDetective with a direct CLI command inside the container, e.g.:
+
+```bash
+docker exec -it log_detective python log_detective.py \
+  --logfile /var/log/auth.log \
+  --rules rules/ssh.yaml \
+  --mqtt \
+  --interactive
+```
+
+Make sure the container has read and (if needed) write access to the rules you want to modify live.
+
+The interactive menu allows you to:
+- View and modify rules (add/delete/disable/restore)
+- Test matches
+- View recent log alerts
+- Launch a text editor on the rules file
+
 ### Note:
 Ensure the container has read access to the log files and rule definitions.
+If you want to edit rules live via the CLI, mount the rules directory with write access:
+```bash
+-v /etc/log_detective/rules:/app/rules
+```
 Using --network host allows direct MQTT access on host network.
 
 ## MQTT Integration

@@ -1,9 +1,13 @@
+# --- CLI/interactive additions ---
+import argparse
 import json
 import logging
 import os
 import re
 import signal
+import threading
 import time
+from collections import deque
 from hashlib import md5
 from types import FrameType
 from typing import Any, Dict, List, Optional, Tuple
@@ -89,7 +93,7 @@ class RuleWatcher:
         path: str,
         rule_file: str,
         verbosity: int,
-        mqtt_config: Dict[str, Any],
+        mqtt_config: Optional[Dict[str, Any]],
         influxdb_config: Optional[Dict[str, Any]],
         use_geoip: bool = False,
     ) -> None:
@@ -107,11 +111,12 @@ class RuleWatcher:
         self.path: str = path
         self.rule_file: str = rule_file
         self.verbosity: int = verbosity
-        self.mqtt_config: Dict[str, Any] = mqtt_config
+        self.mqtt_config: Optional[Dict[str, Any]] = mqtt_config
         self.influxdb_config: Optional[Dict[str, Any]] = influxdb_config
         self.rules_hash: Optional[str] = None
         self.rules: Dict[str, List[re.Pattern]] = {}
         self.use_geoip: bool = use_geoip
+        self.recent_matches = deque(maxlen=100)
         self._load_rules()
 
     def _load_rules(self) -> None:
@@ -164,10 +169,35 @@ class RuleWatcher:
             level: Severity level ('critical' or 'suspicious').
             message: The matched log message.
         """
+        if not self.mqtt_config:
+            logging.error("MQTT config is not set. Cannot send MQTT message.")
+            return
         topic = f"{self.mqtt_config['topic_base']}"
         try:
             topic = f"{self.mqtt_config['topic_base']}/{os.path.basename(self.path).replace('.log','')}/{level}"
-            payload = json.dumps({"log": self.path, "level": level, "message": message})
+            payload_dict = {
+                "log": self.path,
+                "level": level,
+                "message": message,
+            }
+
+            ip = self.extract_ip(message)
+            if ip:
+                payload_dict["ip"] = ip
+                if self.use_geoip and geoip_reader:
+                    try:
+                        city = geoip_reader.city(ip)
+                        if (
+                            city.location
+                            and city.location.latitude is not None
+                            and city.location.longitude is not None
+                        ):
+                            payload_dict["geo_lat"] = city.location.latitude
+                            payload_dict["geo_lon"] = city.location.longitude
+                    except Exception as e:
+                        logging.error(f"GeoIP lookup failed for IP {ip}: {e}")
+
+            payload = json.dumps(payload_dict)
             logging.info(f"MQTT SEND: topic={topic}, payload={payload}")
             print(f"MQTT SEND TRIGGERED: {payload}")
             publish.single(
@@ -201,6 +231,7 @@ class RuleWatcher:
             logging.info(f"LINE MATCHED [{level}]: {msg}")
             if self.verbosity >= (1 if level == "suspicious" else 0):
                 logging.warning(f"{level.upper()} in {self.path}: {msg}")
+                self.recent_matches.append({"level": level, "line": msg})
                 self.send_mqtt(level, msg)
                 self.send_influxdb(level, msg)
 
@@ -337,22 +368,23 @@ class LogFileHandler(FileSystemEventHandler):
                             "logfile": self.watcher.path,
                         }
                     )
-                    publish.single(
-                        f"{self.watcher.mqtt_config.get('topic_base', 'logdetective')}/status",
-                        payload=rotate_payload,
-                        hostname=self.watcher.mqtt_config["host"],
-                        port=self.watcher.mqtt_config.get("port", 1883),
-                        auth=(
-                            {
-                                "username": self.watcher.mqtt_config.get("username"),
-                                "password": self.watcher.mqtt_config.get("password"),
-                            }
-                            if self.watcher.mqtt_config.get("username")
-                            else None
-                        ),
-                        retain=True,
-                    )
-                    logging.info(f"Published logrotate status for {self.watcher.path}")
+                    if self.watcher.mqtt_config:
+                        publish.single(
+                            f"{self.watcher.mqtt_config.get('topic_base', 'logdetective')}/status",
+                            payload=rotate_payload,
+                            hostname=self.watcher.mqtt_config["host"],
+                            port=self.watcher.mqtt_config.get("port", 1883),
+                            auth=(
+                                {
+                                    "username": self.watcher.mqtt_config.get("username"),
+                                    "password": self.watcher.mqtt_config.get("password"),
+                                }
+                                if self.watcher.mqtt_config.get("username")
+                                else None
+                            ),
+                            retain=True,
+                        )
+                        logging.info(f"Published logrotate status for {self.watcher.path}")
                 except Exception as e:
                     logging.error(
                         f"Failed to publish logrotate status for {self.watcher.path}: {e}"
@@ -445,5 +477,235 @@ def start_monitoring() -> None:
 
 
 if __name__ == "__main__":
-    write_pid()
-    start_monitoring()
+
+    def persist_rule_to_file(rule_file: str, level: str, new_rule: str):
+        """Append a new rule to the YAML rules file under the given level."""
+        try:
+            with open(rule_file, "r") as f:
+                rules_data = yaml.safe_load(f) or {}
+            if level not in rules_data:
+                rules_data[level] = []
+            if new_rule not in rules_data[level]:
+                rules_data[level].append(new_rule)
+                with open(rule_file, "w") as f:
+                    yaml.dump(rules_data, f, default_flow_style=False)
+                print(f"💾 Saved new {level} rule to {rule_file}")
+        except Exception as e:
+            print(f"⚠️ Failed to write rule to file: {e}")
+
+    def monitor_rulefile_changes(watcher: RuleWatcher):
+        last_hash = None
+        while True:
+            try:
+                with open(watcher.rule_file, "rb") as f:
+                    data = f.read()
+                    current_hash = md5(data).hexdigest()
+                    if last_hash and current_hash != last_hash:
+                        print("♻️  Rule file updated externally. Reloading...")
+                        watcher._load_rules()
+                    last_hash = current_hash
+            except Exception as e:
+                print(f"⚠️ Error watching rule file: {e}")
+            time.sleep(3)
+
+    def interactive_cli(watcher: RuleWatcher):
+        """Interactive CLI menu for rule management and inspection."""
+        disabled_rules = {"critical": [], "suspicious": []}
+        while True:
+            print("\n[LogDetective Interactive CLI]")
+            print("1) Show active rules")
+            print("2) Add new critical rule")
+            print("3) Add new suspicious rule")
+            print("4) Show recent log matches")
+            print("5) Exit monitoring")
+            print("6) Delete a rule")
+            print("7) Disable a rule temporarily (session only)")
+            print("8) Restore disabled rule")
+            print("9) Edit rule file manually")
+            choice = input("Choose option: ").strip()
+            if choice == "1":
+                print("== Active Rules ==")
+                for level in ("critical", "suspicious"):
+                    print(f"\n[{level.upper()}]")
+                    for rule in watcher.rules.get(level, []):
+                        print(" -", rule.pattern)
+            elif choice == "2":
+                new_rule = input("Enter new critical regex: ").strip()
+                try:
+                    compiled = re.compile(new_rule)
+                    if any(r.pattern == compiled.pattern for r in watcher.rules["critical"]):
+                        print("⚠️ Rule already exists.")
+                        continue
+                    watcher.rules["critical"].append(compiled)
+                    print("✅ Added new critical rule.")
+                    persist_rule_to_file(watcher.rule_file, "critical", new_rule)
+                except re.error as e:
+                    print("❌ Invalid regex:", e)
+            elif choice == "3":
+                new_rule = input("Enter new suspicious regex: ").strip()
+                try:
+                    compiled = re.compile(new_rule)
+                    if any(r.pattern == compiled.pattern for r in watcher.rules["suspicious"]):
+                        print("⚠️ Rule already exists.")
+                        continue
+                    watcher.rules["suspicious"].append(compiled)
+                    print("✅ Added new suspicious rule.")
+                    persist_rule_to_file(watcher.rule_file, "suspicious", new_rule)
+                except re.error as e:
+                    print("❌ Invalid regex:", e)
+            elif choice == "4":
+                print("\n[Recent Log Matches]")
+                for entry in list(watcher.recent_matches)[-10:]:
+                    print(f"[{entry['level'].upper()}] {entry['line'].strip()}")
+            elif choice == "5":
+                print("🛑 Exiting monitoring...")
+                os.kill(os.getpid(), signal.SIGINT)
+                break
+            elif choice == "6":
+                level = input("Level (critical/suspicious): ").strip().lower()
+                if level not in watcher.rules:
+                    print("❌ Invalid level.")
+                    continue
+                for idx, rule in enumerate(watcher.rules[level]):
+                    print(f"{idx+1}) {rule.pattern}")
+                to_remove = input("Enter number of rule to delete: ").strip()
+                try:
+                    idx = int(to_remove) - 1
+                    pattern_str = watcher.rules[level][idx].pattern
+                    watcher.rules[level].pop(idx)
+                    print(f"🗑️ Removed rule: {pattern_str}")
+                    with open(watcher.rule_file, "r") as f:
+                        rules_data = yaml.safe_load(f) or {}
+                    rules_data[level] = [r for r in rules_data.get(level, []) if r != pattern_str]
+                    with open(watcher.rule_file, "w") as f:
+                        yaml.dump(rules_data, f)
+                except Exception as e:
+                    print("❌ Error removing rule:", e)
+            elif choice == "7":
+                level = input("Level (critical/suspicious): ").strip().lower()
+                if level not in watcher.rules:
+                    print("❌ Invalid level.")
+                    continue
+                for idx, rule in enumerate(watcher.rules[level]):
+                    print(f"{idx+1}) {rule.pattern}")
+                to_disable = input("Enter number of rule to disable: ").strip()
+                try:
+                    idx = int(to_disable) - 1
+                    disabled = watcher.rules[level].pop(idx)
+                    disabled_rules[level].append(disabled)
+                    print(f"⛔ Temporarily disabled rule: {disabled.pattern}")
+                except Exception as e:
+                    print("❌ Error disabling rule:", e)
+            else:
+                print("Invalid option.")
+
+            if choice == "8":
+                level = input("Level (critical/suspicious): ").strip().lower()
+                if level not in disabled_rules or not disabled_rules[level]:
+                    print("❌ No disabled rules found.")
+                    continue
+                for idx, rule in enumerate(disabled_rules[level]):
+                    print(f"{idx+1}) {rule.pattern}")
+                to_restore = input("Enter number of rule to restore: ").strip()
+                try:
+                    idx = int(to_restore) - 1
+                    restored = disabled_rules[level].pop(idx)
+                    watcher.rules[level].append(restored)
+                    print(f"✅ Restored rule: {restored.pattern}")
+                except Exception as e:
+                    print("❌ Error restoring rule:", e)
+
+            if choice == "9":
+                print(f"Opening rule file: {watcher.rule_file}")
+                editor = os.environ.get("EDITOR", "nano")
+                os.system(f"{editor} {watcher.rule_file}")
+
+    def cli_interface():
+        parser = argparse.ArgumentParser(
+            description="LogDetective CLI interface",
+            epilog="For full config, omit --logfile/--rules. Interactive mode allows live rule editing.",
+        )
+        parser.add_argument("--logfile", help="Path to log file to monitor in live or test mode.")
+        parser.add_argument("--rules", help="Path to rule YAML file (e.g., rules/ssh.yaml).")
+        parser.add_argument(
+            "--geoip", action="store_true", help="Enable GeoIP lookup for IP addresses."
+        )
+        parser.add_argument(
+            "--mqtt", action="store_true", help="Enable MQTT output (default config assumed)."
+        )
+        parser.add_argument(
+            "--influx", action="store_true", help="Enable InfluxDB output (default config assumed)."
+        )
+        parser.add_argument(
+            "--test", action="store_true", help="Run once through log without watching."
+        )
+        parser.add_argument(
+            "--verbosity",
+            type=int,
+            default=1,
+            help="Verbosity level: 0=silent, 1=suspicious, 2=all.",
+        )
+        parser.add_argument(
+            "--interactive", action="store_true", help="Enable interactive CLI menu for live mode."
+        )
+        args = parser.parse_args()
+
+        if not args.logfile or not args.rules:
+            print("💡 No CLI arguments or incomplete. Running with full config.\n")
+            write_pid()
+            start_monitoring()
+            return
+
+        mqtt_cfg = {"host": "localhost", "topic_base": "logdetective"} if args.mqtt else None
+        influx_cfg = (
+            {"host": "localhost", "port": 8086, "database": "logdetective"} if args.influx else None
+        )
+
+        write_pid()
+        watcher = RuleWatcher(
+            args.logfile,
+            args.rules,
+            args.verbosity,
+            mqtt_cfg,
+            influx_cfg,
+            args.geoip,
+        )
+
+        if args.test:
+            print(f"[TEST MODE] Scanning {args.logfile} once using {args.rules}")
+            with open(args.logfile) as f:
+                for line in f:
+                    for level, match in watcher.check_line(line):
+                        watcher.recent_matches.append({"level": level, "line": match})
+                        if mqtt_cfg:
+                            watcher.send_mqtt(level, match)
+                        if influx_cfg:
+                            watcher.send_influxdb(level, match)
+                        print(f"[{level.upper()}] {match.strip()}")
+        else:
+            print(f"🔍 Starting LogDetective in live mode on {args.logfile}")
+            if args.interactive:
+                threading.Thread(target=interactive_cli, args=(watcher,), daemon=True).start()
+                threading.Thread(
+                    target=monitor_rulefile_changes, args=(watcher,), daemon=True
+                ).start()
+            event_handler = LogFileHandler(watcher)
+            observer = Observer()
+            observer.schedule(event_handler, os.path.dirname(watcher.path), recursive=False)
+            observer.start()
+            try:
+                while running:
+                    time.sleep(1)
+            finally:
+                observer.stop()
+                observer.join()
+                logging.info("Shutting down log_detective...")
+
+    try:
+        cli_interface()
+    except SystemExit:
+        pass
+    except Exception as e:
+        logging.error(f"[CLI ERROR] {e}")
+        write_pid()
+        start_monitoring()

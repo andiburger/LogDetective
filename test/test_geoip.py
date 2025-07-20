@@ -1,5 +1,8 @@
+import json
 import os
 import unittest
+
+# Additional test: Test that send_mqtt includes geoip fields in payload
 from unittest.mock import MagicMock, patch
 
 from geoip2.database import Reader  # type: ignore
@@ -119,6 +122,48 @@ class TestEndToEndDetection(unittest.TestCase):
         mqtt_args, _ = mock_mqtt.call_args
         self.assertIn("critical", mqtt_args)
         self.assertIn("8.8.8.8", mqtt_args[1])  # IP is in the log line argument
+
+
+class TestSendMQTTWithGeoIP(unittest.TestCase):
+    @patch("log_detective.log_detective.publish.single")
+    @patch("log_detective.log_detective.geoip_reader")
+    def test_send_mqtt_with_geoip_fields(self, mock_geoip_reader, mock_publish):
+        mock_location = MagicMock(latitude=50.1, longitude=8.6)
+        mock_city = MagicMock(location=mock_location)
+        mock_geoip_reader.city.return_value = mock_city
+
+        watcher = RuleWatcher(
+            "/var/log/test.log",
+            "rules/test.yaml",
+            verbosity=1,
+            mqtt_config={"host": "localhost", "topic_base": "log/test"},
+            influxdb_config=None,
+            use_geoip=True,
+        )
+
+        # Add mock rule that will match the test log line
+        import re
+
+        watcher.rules = {
+            "critical": [re.compile(r"Failed password .* from (\d{1,3}\.){3}\d{1,3}")],
+            "suspicious": [],
+        }
+
+        line = "sshd[12345]: Failed password for invalid user admin from 8.8.8.8 port 22 ssh2"
+        watcher.extract_ip = lambda line: "8.8.8.8"
+        for level, matched in watcher.check_line(line):
+            watcher.send_mqtt(level, matched)
+
+        mock_publish.assert_called_once()
+        payload_arg = mock_publish.call_args[1]["payload"]
+        payload_dict = json.loads(payload_arg)
+
+        assert payload_dict["ip"] == "8.8.8.8"
+        assert abs(payload_dict["geo_lat"] - 50.1) < 0.01
+        assert abs(payload_dict["geo_lon"] - 8.6) < 0.01
+        assert payload_dict["level"] == "critical"
+        assert "sshd" in payload_dict["message"]
+        assert "sshd" in payload_dict["message"]
 
 
 if __name__ == "__main__":

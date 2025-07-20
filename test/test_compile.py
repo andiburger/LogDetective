@@ -22,6 +22,7 @@ class TestRuleCompilation(unittest.TestCase):
                 "Connection closed: Error during SSL handshake: error:0A000102:SSL routines::unsupported protocol [13]",
                 "Wrong certificate or password for existing user from 1.2.3.4",
                 "Rejected connection from 192.168.1.1:1234",
+                "<W>2025-07-20 11:29:38.549 1 => Ignoring connection: 139.177.201.63:38320 (Global ban)",
             ],
             "suspicious": [
                 "New connection: 192.168.1.100:54321",

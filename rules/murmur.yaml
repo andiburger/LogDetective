@@ -3,6 +3,7 @@ critical:
   - "^.*Connection closed: Error during SSL handshake.*$"
   - "^.*Wrong certificate or password for existing user.*$"
   - "^.*Rejected connection from\\s+\\d{1,3}(?:\\.\\d{1,3}){3}:\\d+.*$"
+  - "^.*Ignoring connection: \\d{1,3}(?:\\.\\d{1,3}){3}:\\d+ \\(Global ban\\).*$"
 
 suspicious:
   - "^.*New connection:\\s+\\d{1,3}(?:\\.\\d{1,3}){3}:\\d+.*$"
