@@ -204,7 +204,7 @@ class RuleWatcher:
                 topic,
                 payload=payload,
                 hostname=self.mqtt_config["host"],
-                port=self.mqtt_config["port"],
+                port=self.mqtt_config.get("port", 1883),
             )
         except Exception as e:
             print(f"MQTT publish failed: {e}")
