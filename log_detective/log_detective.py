@@ -192,8 +192,8 @@ class RuleWatcher:
                             and city.location.latitude is not None
                             and city.location.longitude is not None
                         ):
-                            payload_dict["geo_lat"] = city.location.latitude
-                            payload_dict["geo_lon"] = city.location.longitude
+                            payload_dict["geo_lat"] = str(city.location.latitude)
+                            payload_dict["geo_lon"] = str(city.location.longitude)
                     except Exception as e:
                         logging.error(f"GeoIP lookup failed for IP {ip}: {e}")
 
@@ -237,34 +237,52 @@ class RuleWatcher:
 
     def extract_ip(self, line: str) -> Optional[str]:
         """
-        Extract an IPv4 or IPv6 address from the log line using contextual patterns
-        (e.g., 'from', 'src=', 'client=') with fallback to generic regex.
+        Extract an IPv4 or IPv6 address from the log line.
 
-        Args:
-            line: The log line to search.
-
-        Returns:
-            The first IP address found or None.
+        This implementation **prioritizes explicit IPv4 addresses (optionally with a port)** anywhere in the line
+        so that timestamps like "16:59:07" are not mistaken for an IP address. It still looks for contextual
+        markers (from, src=, client=, host=) and finally falls back to generic IPv4/IPv6 candidates with
+        basic sanity checks to avoid matching time stamps.
+        Returns the IP (IPv4 without port) or an IPv6 candidate string, or None if nothing found.
         """
-        patterns = [
-            r"\bfrom\s+(\d{1,3}(?:\.\d{1,3}){3})\b",
-            r"\bsrc=([\d\.]+)",
-            r"\bclient=([\d\.]+)",
-            r"\bhost=([\d\.]+)",
-            r"\[([a-fA-F0-9:]+)\]",  # common for IPv6 in brackets
-        ]
-        for pat in patterns:
-            match = re.search(pat, line)
-            if match:
-                return match.group(1)
+        # 1) Prefer any explicit IPv4 (with optional :port) anywhere in the line — this avoids matching timestamps
+        m = re.search(r"((?:\d{1,3}\.){3}\d{1,3})(?::\d{1,5})?", line)
+        if m:
+            return m.group(1)
 
-        # Fallback: any IPv4 or IPv6 address
-        generic_ip = re.search(
-            r"\b(?:(?:\d{1,3}\.){3}\d{1,3}|(?:[a-fA-F0-9:]+:+)+[a-fA-F0-9]+)\b",
-            line,
-        )
-        if generic_ip:
-            return generic_ip.group(0)
+        # 2) Contextual patterns that may include IPs (try to capture IPv4 first inside those contexts)
+        contextual = [
+            r"\bfrom\s+((?:\d{1,3}\.){3}\d{1,3})(?::\d{1,5})?\b",
+            r"\bsrc=((?:\d{1,3}\.){3}\d{1,3})(?::\d{1,5})?",
+            r"\bclient=((?:\d{1,3}\.){3}\d{1,3})(?::\d{1,5})?",
+            r"\bhost=((?:\d{1,3}\.){3}\d{1,3})(?::\d{1,5})?",
+            # bracketed or raw IPv6-ish forms
+            r"\[([a-fA-F0-9:]+)\]",
+            r"\bfrom\s+([a-fA-F0-9:]+)\b",
+        ]
+        for pat in contextual:
+            mm = re.search(pat, line)
+            if mm:
+                ip = mm.group(1)
+                # If we accidentally captured IPv4 with a port, strip the port
+                if ":" in ip and ip.count(".") == 3:
+                    ip = ip.split(":")[0]
+                return ip
+
+        # 3) If above didn't match, look for any IPv4 later in the line (return first dotted match)
+        ipv4s = re.findall(r"(?:\d{1,3}\.){3}\d{1,3}", line)
+        if ipv4s:
+            return ipv4s[0]
+
+        # 4) Try to find IPv6-like candidates but avoid matching pure timestamps like HH:MM:SS
+        #    We require either presence of a hex-letter, '::' or at least 3 colons to accept a candidate.
+        ipv6_candidates = re.findall(r"[A-Fa-f0-9:]+", line)
+        for cand in ipv6_candidates:
+            if "::" in cand or re.search(r"[a-fA-F]", cand) or cand.count(":") >= 3:
+                # exclude typical timestamps like 16:59:07 or 1:02:03.456
+                if not re.fullmatch(r"\d{1,2}:\d{2}:\d{2}(?:\.\d+)?", cand):
+                    return cand
+
         return None
 
     def send_influxdb(self, level: str, message: str) -> None:
@@ -375,10 +393,10 @@ class LogFileHandler(FileSystemEventHandler):
                             hostname=self.watcher.mqtt_config["host"],
                             port=self.watcher.mqtt_config.get("port", 1883),
                             auth=(
-                                {
-                                    "username": self.watcher.mqtt_config.get("username"),
-                                    "password": self.watcher.mqtt_config.get("password"),
-                                }
+                                (
+                                    self.watcher.mqtt_config.get("username"),
+                                    self.watcher.mqtt_config.get("password"),
+                                )
                                 if self.watcher.mqtt_config.get("username")
                                 else None
                             ),
