@@ -192,8 +192,8 @@ class RuleWatcher:
                             and city.location.latitude is not None
                             and city.location.longitude is not None
                         ):
-                            payload_dict["geo_lat"] = str(city.location.latitude)
-                            payload_dict["geo_lon"] = str(city.location.longitude)
+                            payload_dict["geo_lat"] = city.location.latitude
+                            payload_dict["geo_lon"] = city.location.longitude
                     except Exception as e:
                         logging.error(f"GeoIP lookup failed for IP {ip}: {e}")
 
