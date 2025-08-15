@@ -1,5 +1,6 @@
 import os
 import sys
+from unittest.mock import patch
 
 from log_detective.log_detective import RuleWatcher
 
@@ -12,6 +13,11 @@ mqtt_config = {"host": "192.168.178.160", "topic_base": "logdetective", "port": 
 
 def test_send_mqtt_message():
     watcher = RuleWatcher("/var/log/test.log", "rules/ssh.yml", 1, mqtt_config, None)
-    # Send a test MQTT message (can be mocked if needed)
-    watcher.send_mqtt("critical", "Manual test message")
+    with patch("paho.mqtt.publish.single") as mock_single:
+        watcher.send_mqtt("critical", "Manual test message")
+        mock_single.assert_called_once()
+        args, kwargs = mock_single.call_args
+        assert mqtt_config["host"] in kwargs.values()
+        assert "logdetective" in kwargs.get("topic", "")
+        assert "Manual test message" in kwargs.get("payload", "")
     print("MQTT message sent successfully.")
