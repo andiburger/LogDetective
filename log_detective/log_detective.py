@@ -16,9 +16,10 @@ import geoip2.database  # type: ignore
 import paho.mqtt.publish as publish  # type: ignore
 import requests  # type: ignore
 import yaml  # type: ignore
-from logdetective_version import VERSION
 from watchdog.events import FileSystemEventHandler  # type: ignore
 from watchdog.observers import Observer  # type: ignore
+
+from .logdetective_version import VERSION
 
 logging.info(f"🚀 Starting LogDetective version {VERSION}")
 print(f"🚀 LogDetective version {VERSION} starting...")
@@ -751,4 +752,5 @@ if __name__ == "__main__":
     except Exception as e:
         logging.error(f"[CLI ERROR] {e}")
         write_pid()
+        start_monitoring()
         start_monitoring()
