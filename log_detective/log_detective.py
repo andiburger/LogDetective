@@ -256,8 +256,9 @@ class RuleWatcher:
             r"\bsrc=((?:\d{1,3}\.){3}\d{1,3})(?::\d{1,5})?",
             r"\bclient=((?:\d{1,3}\.){3}\d{1,3})(?::\d{1,5})?",
             r"\bhost=((?:\d{1,3}\.){3}\d{1,3})(?::\d{1,5})?",
-            # bracketed or raw IPv6-ish forms
-            r"\[([a-fA-F0-9:]+)\]",
+            # bracketed or raw IPv6-ish forms (stricter)
+            r"\[((?:\d{1,3}\.){3}\d{1,3})\]",  # IPv4 in brackets
+            r"\[([A-Fa-f0-9:]{3,})\]",  # IPv6-like in brackets, at least 3 chars
             r"\bfrom\s+([a-fA-F0-9:]+)\b",
         ]
         for pat in contextual:
@@ -267,7 +268,13 @@ class RuleWatcher:
                 # If we accidentally captured IPv4 with a port, strip the port
                 if ":" in ip and ip.count(".") == 3:
                     ip = ip.split(":")[0]
-                return ip
+                # Filter: accept only valid IPv4 or IPv6-like formats, skip plain integers like "1"
+                if re.fullmatch(r"(?:\d{1,3}\.){3}\d{1,3}", ip):
+                    return ip
+                if ":" in ip or re.search(r"[a-fA-F]", ip):
+                    return ip
+                # Not a valid IP format, skip to next pattern
+                continue
 
         # 3) If above didn't match, look for any IPv4 later in the line (return first dotted match)
         ipv4s = re.findall(r"(?:\d{1,3}\.){3}\d{1,3}", line)
@@ -275,12 +282,26 @@ class RuleWatcher:
             return ipv4s[0]
 
         # 4) Try to find IPv6-like candidates but avoid matching pure timestamps like HH:MM:SS
-        #    We require either presence of a hex-letter, '::' or at least 3 colons to accept a candidate.
-        ipv6_candidates = re.findall(r"[A-Fa-f0-9:]+", line)
+        #    Stricter fallback: require at least 3 chars, exclude timestamps, must contain at least one digit,
+        #    and require either a colon or a long hex string. Accept only if "::" present, or hex letter, or >=3 colons, or long hex.
+        ipv6_candidates = re.findall(r"[0-9A-Fa-f:]+", line)
         for cand in ipv6_candidates:
-            if "::" in cand or re.search(r"[a-fA-F]", cand) or cand.count(":") >= 3:
-                # exclude typical timestamps like 16:59:07 or 1:02:03.456
-                if not re.fullmatch(r"\d{1,2}:\d{2}:\d{2}(?:\.\d+)?", cand):
+            if len(cand) < 3:
+                continue
+            # exclude typical timestamps like 16:59:07 or 1:02:03.456
+            if re.fullmatch(r"\d{1,2}:\d{2}:\d{2}(?:\.\d+)?", cand):
+                continue
+            # must contain at least one digit
+            if not re.search(r"\d", cand):
+                continue
+            # IPv6-like or long hex
+            if ":" in cand or re.fullmatch(r"[0-9A-Fa-f]{4,}", cand):
+                if (
+                    "::" in cand
+                    or re.search(r"[A-Fa-f]", cand)
+                    or cand.count(":") >= 3
+                    or re.fullmatch(r"[0-9A-Fa-f]{4,}", cand)
+                ):
                     return cand
 
         return None

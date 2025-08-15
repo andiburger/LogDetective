@@ -165,6 +165,19 @@ class TestSendMQTTWithGeoIP(unittest.TestCase):
         assert "sshd" in payload_dict["message"]
         assert "sshd" in payload_dict["message"]
 
+    def test_no_false_ip_from_bracketed_numbers(self):
+        watcher = RuleWatcher(
+            "/var/log/test.log",
+            "rules/test.yaml",
+            verbosity=1,
+            mqtt_config={"host": "localhost", "topic_base": "log/test"},
+            influxdb_config=None,
+            use_geoip=False,
+        )
+        line = "<W> Connection closed: ... [1]"
+        ip = watcher.extract_ip(line)
+        self.assertIsNone(ip)
+
 
 if __name__ == "__main__":
     unittest.main()
