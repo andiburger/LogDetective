@@ -16,8 +16,12 @@ import geoip2.database  # type: ignore
 import paho.mqtt.publish as publish  # type: ignore
 import requests  # type: ignore
 import yaml  # type: ignore
+from logdetective_version import VERSION
 from watchdog.events import FileSystemEventHandler  # type: ignore
 from watchdog.observers import Observer  # type: ignore
+
+logging.info(f"🚀 Starting LogDetective version {VERSION}")
+print(f"🚀 LogDetective version {VERSION} starting...")
 
 geoip_reader = None
 GEOIP_DEFAULT_PATH = "/usr/share/GeoIP/GeoLite2-City.mmdb"
