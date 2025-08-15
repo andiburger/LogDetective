@@ -16,16 +16,12 @@ def test_send_mqtt_message():
     with patch("paho.mqtt.publish.single") as mock_single:
         watcher.send_mqtt("critical", "Manual test message")
         mock_single.assert_called_once()
-        args, kwargs = mock_single.call_args
-        # Extract topic and payload from args or kwargs
-        # paho.mqtt.publish.single signature: single(topic, payload=None, qos=0, retain=False, hostname="localhost", port=1883, client_id="", keepalive=60, will=None, auth=None, tls=None, protocol=mqtt.MQTTv311, transport="tcp", **kwargs)
-        # So topic is args[0] or kwargs['topic'], payload is args[1] or kwargs['payload']
-        if args:
-            topic = args[0]
-            payload = args[1] if len(args) > 1 else None
-        else:
-            topic = kwargs.get("topic")
-            payload = kwargs.get("payload")
+        kwargs = mock_single.call_args.kwargs
+
+        topic = kwargs.get("topic")
+        payload = kwargs.get("payload")
+
         assert topic is not None and "logdetective" in topic
         assert payload is not None and "Manual test message" in payload
+
     print("MQTT message sent successfully.")
