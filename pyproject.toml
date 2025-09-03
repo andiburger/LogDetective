@@ -4,8 +4,4 @@ target-version = ["py311"]
 
 [tool.isort]
 profile = "black"
-
-[tool.ruff]
-line-length = 100
-select = ["E", "F", "W"]
-ignore = ["E203", "W503"]
+line_length = 100

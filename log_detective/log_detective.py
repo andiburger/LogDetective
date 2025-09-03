@@ -287,8 +287,6 @@ class RuleWatcher:
             return ipv4s[0]
 
         # 4) Try to find IPv6-like candidates but avoid matching pure timestamps like HH:MM:SS
-        #    Stricter fallback: require at least 3 chars, exclude timestamps, must contain at least one digit,
-        #    and require either a colon or a long hex string. Accept only if "::" present, or hex letter, or >=3 colons, or long hex.
         ipv6_candidates = re.findall(r"[0-9A-Fa-f:]+", line)
         for cand in ipv6_candidates:
             if len(cand) < 3:
@@ -296,18 +294,15 @@ class RuleWatcher:
             # exclude typical timestamps like 16:59:07 or 1:02:03.456
             if re.fullmatch(r"\d{1,2}:\d{2}:\d{2}(?:\.\d+)?", cand):
                 continue
-            # must contain at least one digit
-            if not re.search(r"\d", cand):
+            # exclude plain numbers (like "2025")
+            if cand.isdigit():
                 continue
-            # IPv6-like or long hex
-            if ":" in cand or re.fullmatch(r"[0-9A-Fa-f]{4,}", cand):
-                if (
-                    "::" in cand
-                    or re.search(r"[A-Fa-f]", cand)
-                    or cand.count(":") >= 3
-                    or re.fullmatch(r"[0-9A-Fa-f]{4,}", cand)
-                ):
+            # must look like IPv6 (contain ':') or a long hex string
+            if ":" in cand:
+                if "::" in cand or cand.count(":") >= 2:
                     return cand
+            elif re.fullmatch(r"[0-9A-Fa-f]{8,}", cand):  # long hex string (not just year)
+                return cand
 
         return None
 
@@ -752,5 +747,4 @@ if __name__ == "__main__":
     except Exception as e:
         logging.error(f"[CLI ERROR] {e}")
         write_pid()
-        start_monitoring()
         start_monitoring()
