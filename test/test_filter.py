@@ -45,6 +45,6 @@ class TestExtractIp:
         line = "Host [fe80::1] responded"
         assert self.watcher.extract_ip(line) == "fe80::1"
 
-    def test_extract_long_hex_string(self):
+    def test_ignore_long_hex_string(self):
         line = "Weird ID deadbeefcafebabe seen"
-        assert self.watcher.extract_ip(line) == "deadbeefcafebabe"
+        assert self.watcher.extract_ip(line) is None

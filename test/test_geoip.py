@@ -178,6 +178,19 @@ class TestSendMQTTWithGeoIP(unittest.TestCase):
         ip = watcher.extract_ip(line)
         self.assertIsNone(ip)
 
+    def test_no_false_ip_from_ssl_error_code(self):
+        watcher = RuleWatcher(
+            "/var/log/test.log",
+            "rules/test.yaml",
+            verbosity=1,
+            mqtt_config={"host": "localhost", "topic_base": "log/test"},
+            influxdb_config=None,
+            use_geoip=False,
+        )
+        line = "<W>2025-09-11 14:47:55.211 ... error:0A00010B:SSL routines::wrong version number"
+        ip = watcher.extract_ip(line)
+        self.assertIsNone(ip)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -244,64 +244,67 @@ class RuleWatcher:
         """
         Extract an IPv4 or IPv6 address from the log line.
 
-        This implementation **prioritizes explicit IPv4 addresses (optionally with a port)** anywhere in the line
-        so that timestamps like "16:59:07" are not mistaken for an IP address. It still looks for contextual
-        markers (from, src=, client=, host=) and finally falls back to generic IPv4/IPv6 candidates with
-        basic sanity checks to avoid matching time stamps.
-        Returns the IP (IPv4 without port) or an IPv6 candidate string, or None if nothing found.
+        Prioritize explicit IPv4 addresses (optionally with a port).
+        Avoid matching timestamps and hex error codes like ':0A00010B:'.
+        Returns IPv4 (without port) or an IPv6 candidate string, or None.
         """
-        # 1) Prefer any explicit IPv4 (with optional :port) anywhere in the line — this avoids matching timestamps
+        # 1) Prefer any explicit IPv4 (with optional :port)
         m = re.search(r"((?:\d{1,3}\.){3}\d{1,3})(?::\d{1,5})?", line)
         if m:
             return m.group(1)
 
-        # 2) Contextual patterns that may include IPs (try to capture IPv4 first inside those contexts)
+        # 2) Contextual patterns that may include IPs (IPv4 first)
         contextual = [
             r"\bfrom\s+((?:\d{1,3}\.){3}\d{1,3})(?::\d{1,5})?\b",
             r"\bsrc=((?:\d{1,3}\.){3}\d{1,3})(?::\d{1,5})?",
             r"\bclient=((?:\d{1,3}\.){3}\d{1,3})(?::\d{1,5})?",
             r"\bhost=((?:\d{1,3}\.){3}\d{1,3})(?::\d{1,5})?",
-            # bracketed or raw IPv6-ish forms (stricter)
-            r"\[((?:\d{1,3}\.){3}\d{1,3})\]",  # IPv4 in brackets
-            r"\[([A-Fa-f0-9:]{3,})\]",  # IPv6-like in brackets, at least 3 chars
-            r"\bfrom\s+([a-fA-F0-9:]+)\b",
+            r"\[((?:\d{1,3}\.){3}\d{1,3})\]",
+            r"\[([A-Fa-f0-9:]{3,})\]",
+            r"\bfrom\s+([A-Fa-f0-9:]+)\b",
         ]
         for pat in contextual:
             mm = re.search(pat, line)
             if mm:
                 ip = mm.group(1)
-                # If we accidentally captured IPv4 with a port, strip the port
                 if ":" in ip and ip.count(".") == 3:
                     ip = ip.split(":")[0]
-                # Filter: accept only valid IPv4 or IPv6-like formats, skip plain integers like "1"
                 if re.fullmatch(r"(?:\d{1,3}\.){3}\d{1,3}", ip):
                     return ip
-                if ":" in ip or re.search(r"[a-fA-F]", ip):
-                    return ip
-                # Not a valid IP format, skip to next pattern
+                if ":" in ip:
+                    core = ip.strip(":")
+                    if "::" in ip:
+                        if re.fullmatch(r"[0-9A-Fa-f:]+", ip):
+                            return ip
+                        else:
+                            continue
+                    parts = [p for p in core.split(":") if p != ""]
+                    if len(parts) >= 2 and all(re.fullmatch(r"[0-9A-Fa-f]{1,4}", p) for p in parts):
+                        return ip
                 continue
 
-        # 3) If above didn't match, look for any IPv4 later in the line (return first dotted match)
+        # 3) Fallback: any IPv4 anywhere
         ipv4s = re.findall(r"(?:\d{1,3}\.){3}\d{1,3}", line)
         if ipv4s:
             return ipv4s[0]
 
-        # 4) Try to find IPv6-like candidates but avoid matching pure timestamps like HH:MM:SS
+        # 4) Stricter IPv6-like fallback
         ipv6_candidates = re.findall(r"[0-9A-Fa-f:]+", line)
         for cand in ipv6_candidates:
             if len(cand) < 3:
                 continue
-            # exclude typical timestamps like 16:59:07 or 1:02:03.456
             if re.fullmatch(r"\d{1,2}:\d{2}:\d{2}(?:\.\d+)?", cand):
                 continue
-            # exclude plain numbers (like "2025")
-            if cand.isdigit():
+            if not re.search(r"\d", cand):
                 continue
-            # must look like IPv6 (contain ':') or a long hex string
-            if ":" in cand:
-                if "::" in cand or cand.count(":") >= 2:
+            core = cand.strip(":")
+            if "::" in cand:
+                if re.fullmatch(r"[0-9A-Fa-f:]+", cand):
                     return cand
-            elif re.fullmatch(r"[0-9A-Fa-f]{8,}", cand):  # long hex string (not just year)
+                else:
+                    continue
+            parts = [p for p in core.split(":") if p != ""]
+            if len(parts) >= 2 and all(re.fullmatch(r"[0-9A-Fa-f]{1,4}", p) for p in parts):
                 return cand
 
         return None
