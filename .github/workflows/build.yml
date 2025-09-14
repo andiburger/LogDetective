@@ -36,9 +36,9 @@ jobs:
             VERSION=${GITHUB_REF#refs/tags/}
           fi
           IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}/logdetective
-          docker tag logdetective:latest $IMAGE:$VERSION
+          docker tag log_detective:latest $IMAGE:$VERSION
           docker push $IMAGE:$VERSION
-          docker tag logdetective:latest $IMAGE:latest
+          docker tag log_detective:latest $IMAGE:latest
           docker push $IMAGE:latest
 
       - name: Update Release Notes with Docker Image
