@@ -25,24 +25,26 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+      - name: Build Docker image using build script
+        run: |
+          chmod +x ./build_log_detective.sh
+          ./build_log_detective.sh
 
       - name: Log in to GitHub Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      - name: Run build script
-        run: ./build_log_detective.sh
-
-      - name: Build and Push Multi-Arch Image
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository }}:latest
-            ${{ startsWith(github.ref, 'refs/tags/') && format('ghcr.io/{0}:{1}', github.repository, github.ref_name) || '' }}
+      - name: Push Docker image to GHCR
+        run: |
+          if [[ "$GITHUB_REF" == refs/heads/* ]]; then
+            VERSION=dev
+          else
+            VERSION=${GITHUB_REF#refs/tags/}
+          fi
+          IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}
+          docker tag log_detective:latest $IMAGE:$VERSION
+          docker push $IMAGE:$VERSION
+          docker tag log_detective:latest $IMAGE:latest
+          docker push $IMAGE:latest
 
       - name: Update Release Notes with Docker Image
         if: startsWith(github.ref, 'refs/tags/')
