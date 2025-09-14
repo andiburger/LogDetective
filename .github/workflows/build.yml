@@ -1,11 +1,16 @@
 name: CI Build
 
+
 on:
   push:
     branches:
       - main
   release:
     types: [published]
+
+permissions:
+  contents: read
+  packages: write
 
 jobs:
   build:
@@ -35,7 +40,7 @@ jobs:
           else
             VERSION=${GITHUB_REF#refs/tags/}
           fi
-          IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}/logdetective
+          IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}
           docker tag log_detective:latest $IMAGE:$VERSION
           docker push $IMAGE:$VERSION
           docker tag log_detective:latest $IMAGE:latest
@@ -49,5 +54,5 @@ jobs:
             Docker image for this release is available at:
 
             ```bash
-            docker pull ghcr.io/${{ github.repository }}/logdetective:${{ github.ref_name }}
+            docker pull ghcr.io/${{ github.repository }}:${{ github.ref_name }}
             ```
